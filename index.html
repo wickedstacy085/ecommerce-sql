@@ -1,0 +1,1442 @@
+<!DOCTYPE html>
+<html xmlns="http://www.w3.org/1999/xhtml" lang="ru" xml:lang="ru"><head>
+
+<meta charset="utf-8">
+<meta name="generator" content="quarto-1.11.9">
+
+<meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+
+<meta name="author" content="Анастасия Смирнова">
+<meta name="description" content="SQL-анализ 96 тыс. заказов маркетплейса Olist: когорты, retention, LTV, RFM-сегменты, юнит-экономика и влияние доставки на отзывы. Интерактивный дашборд и витрина для Power BI.">
+
+<title>Когорты и юнит-экономика интернет-магазина на SQL – Когорты и юнит-экономика на SQL</title>
+<style>
+/* Default styles provided by pandoc.
+** See https://pandoc.org/MANUAL.html#variables-for-html for config info.
+*/
+span.smallcaps{font-variant: small-caps;}
+div.columns{display: flex; gap: 1.5em;}
+div.column{flex: auto;}
+@media screen {
+div.columns{gap: min(4vw, 1.5em);}
+div.column{overflow-x: auto;}
+}
+div.hanging-indent{margin-left: 1.5em; text-indent: -1.5em;}
+ul.task-list{list-style: none;}
+ul.task-list li input[type="checkbox"] {
+  width: 0.8em;
+  margin: 0 0.8em 0.2em -1em; /* quarto-specific, see https://github.com/quarto-dev/quarto-cli/issues/4556 */ 
+  vertical-align: middle;
+}
+/* CSS for syntax highlighting */
+html { -webkit-text-size-adjust: 100%; }
+pre > code.sourceCode { white-space: pre; position: relative; }
+pre > code.sourceCode > span { display: inline-block; line-height: 1.25; }
+pre > code.sourceCode > span:empty { height: 1.2em; }
+.sourceCode { overflow: visible; }
+code.sourceCode > span { color: inherit; text-decoration: inherit; }
+div.sourceCode { margin: 1em 0; }
+pre.sourceCode { margin: 0; }
+@media screen {
+div.sourceCode { overflow: auto; }
+}
+@media print {
+pre > code.sourceCode { white-space: pre-wrap; }
+pre > code.sourceCode > span { text-indent: -5em; padding-left: 5em; }
+}
+pre.numberSource code
+  { counter-reset: source-line 0; }
+pre.numberSource code > span
+  { position: relative; left: -4em; counter-increment: source-line; }
+pre.numberSource code > span > a:first-child::before
+  { content: counter(source-line);
+    position: relative; left: -1em; text-align: right; vertical-align: baseline;
+    border: none; display: inline-block;
+    -webkit-touch-callout: none; -webkit-user-select: none;
+    -khtml-user-select: none; -moz-user-select: none;
+    -ms-user-select: none; user-select: none;
+    padding: 0 4px; width: 4em;
+  }
+pre.numberSource { margin-left: 3em;  padding-left: 4px; }
+div.sourceCode
+  {   }
+@media screen {
+pre > code.sourceCode > span > a:first-child::before { text-decoration: underline; }
+}
+</style>
+
+
+<script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.min.js" integrity="sha384-ZvpUoO/+PpLXR1lu4jmpXWu80pZlYUAfxl5NsBMWOEPSjUn/6Z/hRTt8+pR6L4N2" crossorigin="anonymous"></script><script src="site_libs/quarto-nav/quarto-nav.js"></script>
+<script src="site_libs/quarto-nav/headroom.min.js"></script>
+<script src="site_libs/clipboard/clipboard.min.js"></script>
+<script src="site_libs/quarto-search/autocomplete.umd.js"></script>
+<script src="site_libs/quarto-search/fuse.min.js"></script>
+<script src="site_libs/quarto-search/quarto-search.js"></script>
+<meta name="quarto:offset" content="./">
+<script src="site_libs/quarto-html/quarto.js" type="module"></script>
+<script src="site_libs/quarto-html/tabsets/tabsets.js" type="module"></script>
+<script src="site_libs/quarto-html/scrollable-regions/scrollable-regions.js" type="module"></script>
+<script src="site_libs/quarto-html/popper.min.js"></script>
+<script src="site_libs/quarto-html/tippy.umd.min.js"></script>
+<script src="site_libs/quarto-html/anchor.min.js"></script>
+<link href="site_libs/quarto-html/tippy.css" rel="stylesheet">
+<link href="site_libs/quarto-html/quarto-syntax-highlighting-63b5708e65d6cd79cd7618c58d0c21e7.css" rel="stylesheet" class="quarto-color-scheme" id="quarto-text-highlighting-styles">
+<link href="site_libs/quarto-html/quarto-syntax-highlighting-dark-447e42e69aaa9833c0ba1b986f430b20.css" rel="stylesheet" class="quarto-color-scheme quarto-color-alternate" id="quarto-text-highlighting-styles">
+<link href="site_libs/quarto-html/quarto-syntax-highlighting-63b5708e65d6cd79cd7618c58d0c21e7.css" rel="stylesheet" class="quarto-color-scheme-extra" id="quarto-text-highlighting-styles">
+<script src="site_libs/bootstrap/bootstrap.min.js"></script>
+<link href="site_libs/bootstrap/bootstrap-icons.css" rel="stylesheet">
+<link href="site_libs/bootstrap/bootstrap-1bfa59ee505a4dd8fc9d98bde6056ef2.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme" id="quarto-bootstrap" data-mode="light">
+<link href="site_libs/bootstrap/bootstrap-dark-37efe74c26acc142c2e4e04c62fd06ca.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme quarto-color-alternate" id="quarto-bootstrap" data-mode="dark">
+<link href="site_libs/bootstrap/bootstrap-1bfa59ee505a4dd8fc9d98bde6056ef2.min.css" rel="stylesheet" append-hash="true" class="quarto-color-scheme-extra" id="quarto-bootstrap" data-mode="light">
+<script id="quarto-search-options" type="application/json">{
+  "location": "navbar",
+  "copy-button": false,
+  "collapse-after": 3,
+  "panel-placement": "end",
+  "type": "overlay",
+  "limit": 50,
+  "keyboard-shortcut": [
+    "f",
+    "/",
+    "s"
+  ],
+  "show-item-context": false,
+  "language": {
+    "search-no-results-text": "Поиск не дал результатов",
+    "search-matching-documents-text": "Результаты поиска",
+    "search-copy-link-title": "Скопировать ссылку",
+    "search-hide-matches-text": "Скрыть дополнительные результаты",
+    "search-more-match-text": "дополнительный результат в этом документе",
+    "search-more-matches-text": "дополнительных результата(-ов) в этом документе",
+    "search-clear-button-title": "Очистить",
+    "search-text-placeholder": "",
+    "search-detached-cancel-button-title": "Отменить",
+    "search-submit-button-title": "Найти",
+    "search-label": "Поиск"
+  }
+}</script>
+<script src="https://cdn.jsdelivr.net/npm/requirejs@2.3.6/require.min.js" integrity="sha384-c9c+LnTbwQ3aujuU7ULEPVvgLs+Fn6fJUvIGTsuu1ZcCf11fiEubah0ttpca4ntM sha384-6V1/AdqZRWk1KAlWbKBlGhN7VG4iE/yAZcO6NZPMF8od0vukrvr0tg4qY6NSrItx" crossorigin="anonymous"></script>
+
+<script type="application/javascript">define('jquery', [],function() {return window.jQuery;})</script>
+<script>
+window.PlotlyConfig = {MathJaxConfig: 'local'};
+if (window.MathJax && window.MathJax.Hub && window.MathJax.Hub.Config) {window.MathJax.Hub.Config({SVG: {font: "STIX-Web"}});}
+</script>
+<script type="module">import "https://cdn.plot.ly/plotly-4.1.1.min"</script>
+
+
+
+<meta property="og:title" content="Когорты и юнит-экономика интернет-магазина на SQL – Когорты и юнит-экономика на SQL">
+<meta property="og:description" content="SQL-анализ 96 тыс. заказов маркетплейса Olist: когорты, retention, LTV, RFM-сегменты, юнит-экономика и влияние доставки на отзывы. Интерактивный дашборд и витрина для Power BI.">
+<meta property="og:site_name" content="Когорты и юнит-экономика на SQL">
+</head>
+
+<body class="nav-fixed quarto-light"><a id="quarto-skip-link" class="visually-hidden-focusable" href="#quarto-document-content">Skip to main content</a><script id="quarto-html-before-body" type="application/javascript">
+    const toggleBodyColorMode = (bsSheetEl) => {
+      const mode = bsSheetEl.getAttribute("data-mode");
+      const bodyEl = window.document.querySelector("body");
+      if (mode === "dark") {
+        bodyEl.classList.add("quarto-dark");
+        bodyEl.classList.remove("quarto-light");
+      } else {
+        bodyEl.classList.add("quarto-light");
+        bodyEl.classList.remove("quarto-dark");
+      }
+    }
+    const toggleBodyColorPrimary = () => {
+      const bsSheetEl = window.document.querySelector("link#quarto-bootstrap:not([rel=disabled-stylesheet])");
+      if (bsSheetEl) {
+        toggleBodyColorMode(bsSheetEl);
+      }
+    }
+    const setColorSchemeToggle = (alternate) => {
+      const toggles = window.document.querySelectorAll('.quarto-color-scheme-toggle');
+      for (let i=0; i < toggles.length; i++) {
+        const toggle = toggles[i];
+        if (toggle) {
+          toggle.setAttribute("aria-checked", alternate ? "true" : "false");
+          if (alternate) {
+            toggle.classList.add("alternate");
+          } else {
+            toggle.classList.remove("alternate");
+          }
+        }
+      }
+    };
+    const toggleColorMode = (alternate) => {
+      // Switch the stylesheets
+      const primaryStylesheets = window.document.querySelectorAll('link.quarto-color-scheme:not(.quarto-color-alternate)');
+      const alternateStylesheets = window.document.querySelectorAll('link.quarto-color-scheme.quarto-color-alternate');
+      manageTransitions('#quarto-margin-sidebar .nav-link', false);
+      if (alternate) {
+        // note: dark is layered on light, we don't disable primary!
+        enableStylesheet(alternateStylesheets);
+        for (const sheetNode of alternateStylesheets) {
+          if (sheetNode.id === "quarto-bootstrap") {
+            toggleBodyColorMode(sheetNode);
+          }
+        }
+      } else {
+        disableStylesheet(alternateStylesheets);
+        enableStylesheet(primaryStylesheets)
+        toggleBodyColorPrimary();
+      }
+      manageTransitions('#quarto-margin-sidebar .nav-link', true);
+      // Switch the toggles
+      setColorSchemeToggle(alternate)
+    }
+    // Hack to workaround the fact that safari doesn't
+    // properly recolor the scrollbar when toggling (#1455).
+    // Not run on load: stylesheets are set before first paint there, and
+    // scrolling would undo the scroll to a URL fragment (#14973).
+    // The one pixel nudge keeps the reader where they were.
+    const refreshSafariScrollbar = () => {
+      if (navigator.userAgent.indexOf('Safari') > 0 && navigator.userAgent.indexOf('Chrome') == -1) {
+        manageTransitions("body", false);
+        const scrollY = window.scrollY;
+        window.scrollTo(0, scrollY > 0 ? scrollY - 1 : 1);
+        setTimeout(() => {
+          window.scrollTo(0, scrollY);
+          manageTransitions("body", true);
+        }, 40);
+      }
+    }
+    const disableStylesheet = (stylesheets) => {
+      for (let i=0; i < stylesheets.length; i++) {
+        const stylesheet = stylesheets[i];
+        stylesheet.rel = 'disabled-stylesheet';
+      }
+    }
+    const enableStylesheet = (stylesheets) => {
+      for (let i=0; i < stylesheets.length; i++) {
+        const stylesheet = stylesheets[i];
+        if(stylesheet.rel !== 'stylesheet') { // for Chrome, which will still FOUC without this check
+          stylesheet.rel = 'stylesheet';
+        }
+      }
+    }
+    const manageTransitions = (selector, allowTransitions) => {
+      const els = window.document.querySelectorAll(selector);
+      for (let i=0; i < els.length; i++) {
+        const el = els[i];
+        if (allowTransitions) {
+          el.classList.remove('notransition');
+        } else {
+          el.classList.add('notransition');
+        }
+      }
+    }
+    const isFileUrl = () => {
+      return window.location.protocol === 'file:';
+    }
+    const hasAlternateSentinel = () => {
+      let styleSentinel = getColorSchemeSentinel();
+      if (styleSentinel !== null) {
+        return styleSentinel === "alternate";
+      } else {
+        return false;
+      }
+    }
+    const setStyleSentinel = (alternate) => {
+      const value = alternate ? "alternate" : "default";
+      if (!isFileUrl()) {
+        window.localStorage.setItem("quarto-color-scheme", value);
+      } else {
+        localAlternateSentinel = value;
+      }
+    }
+    const getColorSchemeSentinel = () => {
+      if (!isFileUrl()) {
+        const storageValue = window.localStorage.getItem("quarto-color-scheme");
+        return storageValue != null ? storageValue : localAlternateSentinel;
+      } else {
+        return localAlternateSentinel;
+      }
+    }
+    const toggleGiscusIfUsed = (isAlternate, darkModeDefault) => {
+      const baseTheme = document.querySelector('#giscus-base-theme')?.value ?? 'light';
+      const alternateTheme = document.querySelector('#giscus-alt-theme')?.value ?? 'dark';
+      let newTheme = '';
+      if(authorPrefersDark) {
+        newTheme = isAlternate ? baseTheme : alternateTheme;
+      } else {
+        newTheme = isAlternate ? alternateTheme : baseTheme;
+      }
+      const changeGiscusTheme = () => {
+        // From: https://github.com/giscus/giscus/issues/336
+        const sendMessage = (message) => {
+          const iframe = document.querySelector('iframe.giscus-frame');
+          if (!iframe) return;
+          iframe.contentWindow.postMessage({ giscus: message }, 'https://giscus.app');
+        }
+        sendMessage({
+          setConfig: {
+            theme: newTheme
+          }
+        });
+      }
+      const isGiscussLoaded = window.document.querySelector('iframe.giscus-frame') !== null;
+      if (isGiscussLoaded) {
+        changeGiscusTheme();
+      }
+    };
+    const authorPrefersDark = false;
+    const darkModeDefault = authorPrefersDark;
+      document.querySelector('link#quarto-text-highlighting-styles.quarto-color-scheme-extra').rel = 'disabled-stylesheet';
+      document.querySelector('link#quarto-bootstrap.quarto-color-scheme-extra').rel = 'disabled-stylesheet';
+    let localAlternateSentinel = darkModeDefault ? 'alternate' : 'default';
+    // Dark / light mode switch
+    window.quartoToggleColorScheme = () => {
+      // Read the current dark / light value
+      let toAlternate = !hasAlternateSentinel();
+      toggleColorMode(toAlternate);
+      refreshSafariScrollbar();
+      setStyleSentinel(toAlternate);
+      toggleGiscusIfUsed(toAlternate, darkModeDefault);
+      window.dispatchEvent(new Event('resize'));
+    };
+    // Switch to dark mode if need be
+    if (hasAlternateSentinel()) {
+      toggleColorMode(true);
+    } else {
+      toggleColorMode(false);
+    }
+  </script>
+
+<div id="quarto-search-results"></div>
+  <header id="quarto-header" class="headroom fixed-top">
+    <nav class="navbar navbar-expand-lg " data-bs-theme="dark" aria-label="Сайт">
+      <div class="navbar-container container-fluid">
+      <div class="navbar-brand-container mx-auto">
+    <a class="navbar-brand" href="./index.html">
+    <span class="navbar-title">Когорты и юнит-экономика на SQL</span>
+    </a>
+  </div>
+          <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarCollapse" aria-controls="navbarCollapse" aria-expanded="false" aria-label="Переключить навигацию" onclick="if (window.quartoToggleHeadroom) { window.quartoToggleHeadroom(); }">
+  <span class="navbar-toggler-icon"></span>
+</button>
+          <div class="collapse navbar-collapse" id="navbarCollapse">
+            <ul class="navbar-nav navbar-nav-scroll me-auto">
+  <li class="nav-item">
+    <a class="nav-link" href="https://wickedstacy085.github.io/analytics/"> 
+<span class="menu-text">← Все проекты</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link active" href="./index.html" aria-current="page"> 
+<span class="menu-text">Отчёт</span></a>
+  </li>  
+  <li class="nav-item">
+    <a class="nav-link" href="./dashboard.html"> 
+<span class="menu-text">Дашборд</span></a>
+  </li>  
+</ul>
+            <ul class="navbar-nav navbar-nav-scroll ms-auto">
+  <li class="nav-item compact">
+    <a class="nav-link" href="https://github.com/wickedstacy085/ecommerce-sql"> <i class="bi bi-github" role="img" aria-label="GitHub">
+</i> 
+<span class="menu-text"></span></a>
+  </li>  
+</ul>
+          </div> <!-- /navcollapse -->
+            <div class="quarto-navbar-tools">
+  <button type="button" role="switch" aria-checked="false" class="quarto-color-scheme-toggle quarto-navigation-tool  px-1" onclick="window.quartoToggleColorScheme(); return false;" title="Переключить темный режим" aria-label="Переключить темный режим"><i class="bi"></i></button>
+</div>
+            <div id="quarto-search" class="" title="Поиск"></div>
+      </div> <!-- /container-fluid -->
+    </nav>
+</header>
+<!-- content -->
+<div id="quarto-content" class="quarto-container page-columns page-rows-contents page-layout-article page-navbar">
+<!-- sidebar -->
+<!-- margin-sidebar -->
+    <div id="quarto-margin-sidebar" class="sidebar margin-sidebar">
+        <nav id="TOC" role="doc-toc" aria-labelledby="toc-title" class="toc-active">
+    <h2 id="toc-title">Содержание</h2>
+   
+  <ul>
+  <li><a href="#данные" id="toc-данные" class="nav-link active" data-scroll-target="#данные">Данные</a></li>
+  <li><a href="#когорты-клиенты-почти-не-возвращаются" id="toc-когорты-клиенты-почти-не-возвращаются" class="nav-link" data-scroll-target="#когорты-клиенты-почти-не-возвращаются">Когорты: клиенты почти не возвращаются</a></li>
+  <li><a href="#ltv-выручка-с-клиента-первый-заказ" id="toc-ltv-выручка-с-клиента-первый-заказ" class="nav-link" data-scroll-target="#ltv-выручка-с-клиента-первый-заказ">LTV: выручка с клиента ≈ первый заказ</a></li>
+  <li><a href="#доставка-7-заказов-треть-негатива" id="toc-доставка-7-заказов-треть-негатива" class="nav-link" data-scroll-target="#доставка-7-заказов-треть-негатива">Доставка: 7% заказов — треть негатива</a></li>
+  <li><a href="#rfm-где-деньги" id="toc-rfm-где-деньги" class="nav-link" data-scroll-target="#rfm-где-деньги">RFM: где деньги</a></li>
+  <li><a href="#рекомендации" id="toc-рекомендации" class="nav-link" data-scroll-target="#рекомендации">Рекомендации</a></li>
+  <li><a href="#ограничения" id="toc-ограничения" class="nav-link" data-scroll-target="#ограничения">Ограничения</a></li>
+  <li><a href="#витрина-для-power-bi-и-код" id="toc-витрина-для-power-bi-и-код" class="nav-link" data-scroll-target="#витрина-для-power-bi-и-код">Витрина для Power BI и код</a></li>
+  </ul>
+</nav>
+    </div>
+<!-- main -->
+<main class="content" id="quarto-document-content" tabindex="-1">
+
+
+<header id="title-block-header" class="quarto-title-block default">
+<div class="quarto-title">
+<h1 class="title">Когорты и юнит-экономика интернет-магазина на SQL</h1>
+</div>
+
+<div>
+  <div class="description">
+    SQL-анализ 96 тыс. заказов маркетплейса Olist: когорты, retention, LTV, RFM-сегменты, юнит-экономика и влияние доставки на отзывы. Интерактивный дашборд и витрина для Power BI.
+  </div>
+</div>
+
+
+<div class="quarto-title-meta">
+
+    <div>
+    <div class="quarto-title-meta-heading">Автор</div>
+    <div class="quarto-title-meta-contents">
+             <p>Анастасия Смирнова </p>
+          </div>
+  </div>
+    
+    <div>
+    <div class="quarto-title-meta-heading">Дата публикации</div>
+    <div class="quarto-title-meta-contents">
+      <p class="date">22 ноября 2026 г.</p>
+    </div>
+  </div>
+  
+    
+  </div>
+  
+
+
+</header>
+
+
+<div class="result-box">
+<p><strong>Вопрос.</strong> Маркетплейс растёт: за 20 месяцев 96 211 доставленных заказов на R$ 15,4 млн. Растёт ли он за счёт постоянных клиентов — и где теряет деньги и репутацию?</p>
+<p><strong>Ответ.</strong> Нет: повторно покупают только <strong>3,0% клиентов</strong>, и за год повторные покупки добавляют к выручке с клиента всего 3,0%. LTV ≈ первый заказ — значит, привлечение окупается только с первой покупки. Главная управляемая проблема — доставка: <strong>6,8% заказов опаздывают, и на них приходится 33% всех негативных отзывов</strong>.</p>
+<p><a href="./dashboard.html" class="btn btn-primary btn-sm">Открыть интерактивный дашборд →</a></p>
+</div>
+<section id="данные" class="level2">
+<h2 class="anchored" data-anchor-id="данные">Данные</h2>
+<p><a href="https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce">Olist</a> — реальные обезличенные заказы бразильского маркетплейса, 8 связанных таблиц (лицензия CC BY-NC-SA 4.0). В анализе — доставленные заказы с января 2017 по август 2018: 96 211 заказов, 93 104 клиентов. Выручка заказа — товары плюс доставка.</p>
+<p>Весь анализ — SQL-запросы в DuckDB (<a href="https://github.com/wickedstacy085/ecommerce-sql/tree/main/sql">папка <code>sql/</code></a>), Python только выполняет их и рисует графики. Каждый запрос проверен тестами: число строк совпадает с оригиналом, выручка в отчётах сходится с позициями заказов, каждый клиент попадает ровно в одну когорту и один сегмент.</p>
+<p><strong>Ловушка в данных.</strong> <code>customer_id</code> в Olist новый у каждого заказа, поэтому по нему повторных покупок нет вообще. Человека идентифицирует <code>customer_unique_id</code> — с него начинается базовый слой:</p>
+<div id="3f7acd09" class="cell" data-execution_count="2">
+<div class="cell-output cell-output-display cell-output-markdown" data-execution_count="2">
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb1"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb1-1"><a href="#cb1-1" aria-hidden="true" tabindex="-1"></a><span class="co">-- Базовый слой: один доставленный заказ = одна строка.</span></span>
+<span id="cb1-2"><a href="#cb1-2" aria-hidden="true" tabindex="-1"></a><span class="co">-- Клиент — customer_unique_id: customer_id в Olist новый у каждого заказа,</span></span>
+<span id="cb1-3"><a href="#cb1-3" aria-hidden="true" tabindex="-1"></a><span class="co">-- и по нему повторных покупок не видно вообще.</span></span>
+<span id="cb1-4"><a href="#cb1-4" aria-hidden="true" tabindex="-1"></a><span class="kw">create</span> <span class="kw">or</span> <span class="kw">replace</span> <span class="kw">view</span> orders <span class="kw">as</span></span>
+<span id="cb1-5"><a href="#cb1-5" aria-hidden="true" tabindex="-1"></a><span class="kw">with</span> items <span class="kw">as</span> (</span>
+<span id="cb1-6"><a href="#cb1-6" aria-hidden="true" tabindex="-1"></a>    <span class="kw">select</span> order_id,</span>
+<span id="cb1-7"><a href="#cb1-7" aria-hidden="true" tabindex="-1"></a>           <span class="fu">sum</span>(price <span class="op">+</span> freight_value) <span class="kw">as</span> revenue,</span>
+<span id="cb1-8"><a href="#cb1-8" aria-hidden="true" tabindex="-1"></a>           <span class="fu">sum</span>(freight_value)         <span class="kw">as</span> freight,</span>
+<span id="cb1-9"><a href="#cb1-9" aria-hidden="true" tabindex="-1"></a>           <span class="fu">count</span>(<span class="op">*</span>)                   <span class="kw">as</span> items</span>
+<span id="cb1-10"><a href="#cb1-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">from</span> raw_order_items</span>
+<span id="cb1-11"><a href="#cb1-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">group</span> <span class="kw">by</span> order_id</span>
+<span id="cb1-12"><a href="#cb1-12" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb1-13"><a href="#cb1-13" aria-hidden="true" tabindex="-1"></a><span class="kw">select</span> o.order_id,</span>
+<span id="cb1-14"><a href="#cb1-14" aria-hidden="true" tabindex="-1"></a>       c.customer_unique_id,</span>
+<span id="cb1-15"><a href="#cb1-15" aria-hidden="true" tabindex="-1"></a>       c.customer_state                    <span class="kw">as</span> state,</span>
+<span id="cb1-16"><a href="#cb1-16" aria-hidden="true" tabindex="-1"></a>       o.order_purchase_timestamp          <span class="kw">as</span> purchased_at,</span>
+<span id="cb1-17"><a href="#cb1-17" aria-hidden="true" tabindex="-1"></a>       o.order_delivered_customer_date     <span class="kw">as</span> delivered_at,</span>
+<span id="cb1-18"><a href="#cb1-18" aria-hidden="true" tabindex="-1"></a>       o.order_estimated_delivery_date     <span class="kw">as</span> estimated_at,</span>
+<span id="cb1-19"><a href="#cb1-19" aria-hidden="true" tabindex="-1"></a>       i.revenue, i.freight, i.items</span>
+<span id="cb1-20"><a href="#cb1-20" aria-hidden="true" tabindex="-1"></a><span class="kw">from</span> raw_orders o</span>
+<span id="cb1-21"><a href="#cb1-21" aria-hidden="true" tabindex="-1"></a><span class="kw">join</span> raw_customers c <span class="kw">using</span> (customer_id)</span>
+<span id="cb1-22"><a href="#cb1-22" aria-hidden="true" tabindex="-1"></a><span class="kw">join</span> items i <span class="kw">using</span> (order_id)</span>
+<span id="cb1-23"><a href="#cb1-23" aria-hidden="true" tabindex="-1"></a><span class="kw">where</span> o.order_status <span class="op">=</span> <span class="st">'delivered'</span></span>
+<span id="cb1-24"><a href="#cb1-24" aria-hidden="true" tabindex="-1"></a>  <span class="kw">and</span> o.order_purchase_timestamp <span class="op">&gt;=</span> (<span class="kw">select</span> period_start <span class="kw">from</span> params)</span>
+<span id="cb1-25"><a href="#cb1-25" aria-hidden="true" tabindex="-1"></a>  <span class="kw">and</span> o.order_purchase_timestamp <span class="op">&lt;</span>  (<span class="kw">select</span> period_end   <span class="kw">from</span> params);</span>
+<span id="cb1-26"><a href="#cb1-26" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb1-27"><a href="#cb1-27" aria-hidden="true" tabindex="-1"></a><span class="co">-- Один отзыв на заказ: самый поздний по дате ответа.</span></span>
+<span id="cb1-28"><a href="#cb1-28" aria-hidden="true" tabindex="-1"></a><span class="kw">create</span> <span class="kw">or</span> <span class="kw">replace</span> <span class="kw">view</span> order_reviews <span class="kw">as</span></span>
+<span id="cb1-29"><a href="#cb1-29" aria-hidden="true" tabindex="-1"></a><span class="kw">select</span> order_id, review_score, review_creation_date</span>
+<span id="cb1-30"><a href="#cb1-30" aria-hidden="true" tabindex="-1"></a><span class="kw">from</span> raw_order_reviews</span>
+<span id="cb1-31"><a href="#cb1-31" aria-hidden="true" tabindex="-1"></a>qualify <span class="fu">row_number</span>() <span class="kw">over</span> (<span class="kw">partition</span> <span class="kw">by</span> order_id</span>
+<span id="cb1-32"><a href="#cb1-32" aria-hidden="true" tabindex="-1"></a>                           <span class="kw">order</span> <span class="kw">by</span> review_answer_timestamp <span class="kw">desc</span>, review_id) <span class="op">=</span> <span class="dv">1</span>;</span></code></pre></div><button title="Скопировать текст" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</div>
+</section>
+<section id="когорты-клиенты-почти-не-возвращаются" class="level2">
+<h2 class="anchored" data-anchor-id="когорты-клиенты-почти-не-возвращаются">Когорты: клиенты почти не возвращаются</h2>
+<div id="cell-fig-cohorts" class="cell" data-execution_count="3">
+<div id="fig-cohorts" class="cell-output cell-output-display quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-cohorts-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div style="height:520px; width:100%;">            <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.min.js"></script><script>if (window.MathJax && window.MathJax.Hub && window.MathJax.Hub.Config) {window.MathJax.Hub.Config({SVG: {font: "STIX-Web"}});}</script>                <script>window.PlotlyConfig = {MathJaxConfig: 'local'};</script>
+        <script charset="utf-8" src="https://cdn.plot.ly/plotly-4.1.1.min.js" integrity="sha256-O24V1F27f8pb0glCkelh3cVHLNiHAJ5gCaVtq2aNch8=" crossorigin="anonymous"></script>                <div id="5b51220d-66a8-4a0e-8621-ff8e710c7af8" class="plotly-graph-div" style="height:100%; width:100%;"></div>            <script>                window.PLOTLYENV=window.PLOTLYENV || {};                                if (document.getElementById("5b51220d-66a8-4a0e-8621-ff8e710c7af8")) {                    Plotly.newPlot(                        "5b51220d-66a8-4a0e-8621-ff8e710c7af8",                        [{"coloraxis":"coloraxis","name":"0","texttemplate":"%{z:.1f}","x":{"dtype":"i1","bdata":"AQIDBAUGBwgJCgsM"},"y":["2017-01","2017-02","2017-03","2017-04","2017-05","2017-06","2017-07","2017-08","2017-09","2017-10","2017-11","2017-12","2018-01","2018-02","2018-03","2018-04","2018-05","2018-06","2018-07"],"z":{"dtype":"f8","bdata":"jGQVzsnT0T+MZBXOydPRP4xkFc7J08E\u002f0hYgta692j+MZBXOydPBP9IWILWuvdo\u002fjGQVzsnTwT+MZBXOydPBPwAAAAAAAAAA0hYgta692j+MZBXOydPBP6+9mkG8SOY\u002fq5D2SFSWxz85I3jn8KfTP49r8wsbc78\u002fHf50qreE2z+Pa\u002fMLG3O\u002fP49r8wsbc88\u002fq5D2SFSWxz+Pa\u002fMLG3O\u002fP6uQ9khUlsc\u002fj2vzCxtzvz85I3jn8KfTP49r8wsbc78\u002fBmRi0lEg3D\u002fA9CGsKwPXP2MsQr++kdk\u002fwPQhrCsD1z8cvQGZmHTEPxy9AZmYdMQ\u002fHL0BmZh01D8cvQGZmHTUPxy9AZmYdLQ\u002fwPQhrCsD1z+qm4Ll5K6+P2MsQr++kck\u002fZTkmf2\u002fZ4z\u002fYCBKRMVvMP+HTdNpar8Y\u002f6Z7XI4QD0T\u002fpntcjhAPRP+HTdNpar9Y\u002fZTkmf2\u002fZ0z9lOSZ\u002fb9nTP+HTdNpar8Y\u002f6Z7XI4QD0T\u002fh03TaWq+2P+HTdNpar6Y\u002fmmo5ziys3T+aajnOLKzdP6Di4wCci9I\u002foOLjAJyL0j9JecfNXmbUP0Y9cjSn9tk\u002foOLjAJyLwj\u002f2SwA02bDQP\u002fZLADTZsNA\u002f9ksANNmw0D\u002fzD6uaIUHWP5pqOc4srM0\u002f8H0yPTKc3z8ny47KwUnZP74GcJs8Zds\u002fXRjrV1H30j8ny47KwUnZP46PrflGLtc\u002fV0JRbLeAzT\u002fE3AmH1tvAPyfLjsrBSck\u002fXRjrV1H30j+Oj635Ri7XP\u002fVTzCjMEsU\u002fLOo\u002f\u002f5IN4T+f458YPyvWP7XYP5gIss4\u002f\u002fedfsiHC0j8T3f8x60jLP87lf2WwdtQ\u002fE93\u002fMetIuz9x4b\u002fLzd\u002fHPyzqP\u002f+SDdE\u002fE93\u002fMetIyz\u002f951+yIcLSPyzqP\u002f+SDcE\u002fC9C3N9UV5j8L0Lc31RXWP3YjfhlMWtE\u002fC9C3N9UV1j8I3MnpX5DgP1Ky5ngk7tI\u002fdiN+GUxa0T9SsuZ4JO7CP1Ky5ngk7sI\u002fNSkrdOeMzz\u002fD7Yj2hT3JPzUpK3TnjL8\u002fEUzSrj1f5j\u002fEO6Wb+ZPhP8Q7pZv5k9E\u002fzWEOc5jD3D\u002fNYQ5zmMPMP81hDnOYw8w\u002fqmws1cX1zz\u002fEO6Wb+ZPRP+5W8BBrkck\u002fqmws1cX1zz8zQbRMEC2zPwAAAAAAAPh\u002fSenvCafr5j80Oon2I0TQP0zg3n3uqLc\u002fX5hWHSqTzT9VvJpNDJ7KP1W8mk0Mnso\u002fTODefe6o1z85KGfesr7RP0zg3n3uqMc\u002fVbyaTQyeyj8AAAAAAAD4fwAAAAAAAPh\u002fn6\u002fE07Mg4j8csX\u002fG6ZDXP\u002fIF7MrXwMU\u002f8gXsytfAxT8csX\u002fG6ZDHP5iyOrkfAb0\u002fHLF\u002fxumQxz92BDHYoVDAP5iyOrkfAa0\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fqP6F131gyj8sXNu1+PvRP8+hbQ3ElNU\u002f90RVQwrJ0D+o\u002foXXfWDKP8+hbQ3ElMU\u002fY3NhKOcukz880HnyoPrHPwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fmmzrEdOC1T9wl5DFrWHXP1qscwSLtNI\u002fWqxzBIu00j8w1xi4ZZPEPwUCvmtAcsY\u002fXK1SOqvtzT8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002flYMGxlBk1j8SxHuy\u002fnHZPxhDkdmiVtM\u002fmwIc7fRI0D+PBPGerH\u002fMPzuETQGOdso\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fUbbRvmqB2T+IkCnsmuTSP4iQKeya5NI\u002fdBrceZE6vj90Gtx5kTq+PwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fFXbWIff14j9KWAMPbXLTP0ONOEt7Hc8\u002fds9PWpWAwT8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fzkYaW8e34D\u002fORhpbx7fQPwVzf2IKmsc\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fCKKB2Ss32z+KCwFY\u002fWrRPwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fSL9fe9Gs4D8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002fAAAAAAAA+H8AAAAAAAD4fwAAAAAAAPh\u002f","shape":"19, 12"},"type":"heatmap","xaxis":"x","yaxis":"y","hovertemplate":"\u041c\u0435\u0441\u044f\u0446\u0435\u0432 \u0441 \u043f\u0435\u0440\u0432\u043e\u0439 \u043f\u043e\u043a\u0443\u043f\u043a\u0438: %{x}\u003cbr\u003e\u041a\u043e\u0433\u043e\u0440\u0442\u0430: %{y}\u003cbr\u003e%: %{z}\u003cextra\u003e\u003c\u002fextra\u003e"}],                        {"template":{"data":{"histogram2dcontour":[{"type":"histogram2dcontour","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"choropleth":[{"type":"choropleth","colorbar":{"outlinewidth":0,"ticks":""}}],"histogram2d":[{"type":"histogram2d","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"heatmap":[{"type":"heatmap","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"contourcarpet":[{"type":"contourcarpet","colorbar":{"outlinewidth":0,"ticks":""}}],"contour":[{"type":"contour","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"surface":[{"type":"surface","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"mesh3d":[{"type":"mesh3d","colorbar":{"outlinewidth":0,"ticks":""}}],"scatter":[{"fillpattern":{"fillmode":"overlay","size":10,"solidity":0.2},"type":"scatter"}],"parcoords":[{"type":"parcoords","line":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterpolargl":[{"type":"scatterpolargl","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"bar":[{"error_x":{"color":"#2a3f5f"},"error_y":{"color":"#2a3f5f"},"marker":{"line":{"color":"#E5ECF6","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"bar"}],"scattergeo":[{"type":"scattergeo","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterpolar":[{"type":"scatterpolar","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"histogram":[{"marker":{"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"histogram"}],"scattergl":[{"type":"scattergl","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatter3d":[{"type":"scatter3d","line":{"colorbar":{"outlinewidth":0,"ticks":""}},"marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattermap":[{"type":"scattermap","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterternary":[{"type":"scatterternary","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattercarpet":[{"type":"scattercarpet","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"carpet":[{"aaxis":{"endlinecolor":"#2a3f5f","gridcolor":"white","linecolor":"white","minorgridcolor":"white","startlinecolor":"#2a3f5f"},"baxis":{"endlinecolor":"#2a3f5f","gridcolor":"white","linecolor":"white","minorgridcolor":"white","startlinecolor":"#2a3f5f"},"type":"carpet"}],"table":[{"cells":{"fill":{"color":"#EBF0F8"},"line":{"color":"white"}},"header":{"fill":{"color":"#C8D4E3"},"line":{"color":"white"}},"type":"table"}],"barpolar":[{"marker":{"line":{"color":"#E5ECF6","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"barpolar"}],"pie":[{"automargin":true,"type":"pie"}]},"layout":{"autotypenumbers":"strict","colorway":["#636efa","#EF553B","#00cc96","#ab63fa","#FFA15A","#19d3f3","#FF6692","#B6E880","#FF97FF","#FECB52"],"font":{"color":"#2a3f5f"},"hovermode":"closest","hoverlabel":{"align":"left"},"paper_bgcolor":"white","plot_bgcolor":"#E5ECF6","polar":{"bgcolor":"#E5ECF6","angularaxis":{"gridcolor":"white","linecolor":"white","ticks":""},"radialaxis":{"gridcolor":"white","linecolor":"white","ticks":""}},"ternary":{"bgcolor":"#E5ECF6","aaxis":{"gridcolor":"white","linecolor":"white","ticks":""},"baxis":{"gridcolor":"white","linecolor":"white","ticks":""},"caxis":{"gridcolor":"white","linecolor":"white","ticks":""}},"coloraxis":{"colorbar":{"outlinewidth":0,"ticks":""}},"colorscale":{"sequential":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"sequentialminus":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"diverging":[[0,"#8e0152"],[0.1,"#c51b7d"],[0.2,"#de77ae"],[0.3,"#f1b6da"],[0.4,"#fde0ef"],[0.5,"#f7f7f7"],[0.6,"#e6f5d0"],[0.7,"#b8e186"],[0.8,"#7fbc41"],[0.9,"#4d9221"],[1,"#276419"]]},"xaxis":{"gridcolor":"white","linecolor":"white","ticks":"","title":{"standoff":15},"zerolinecolor":"white","automargin":true,"zerolinewidth":2},"yaxis":{"gridcolor":"white","linecolor":"white","ticks":"","title":{"standoff":15},"zerolinecolor":"white","automargin":true,"zerolinewidth":2},"scene":{"xaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2},"yaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2},"zaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2}},"shapedefaults":{"line":{"color":"#2a3f5f"}},"annotationdefaults":{"arrowcolor":"#2a3f5f","arrowhead":0,"arrowwidth":1},"geo":{"bgcolor":"white","landcolor":"#E5ECF6","subunitcolor":"white","showland":true,"showlakes":true,"lakecolor":"white"},"title":{"x":0.05},"margin":{"b":0,"l":0,"r":0,"t":30}}},"xaxis":{"anchor":"y","domain":[0.0,1.0],"title":{"text":"\u041c\u0435\u0441\u044f\u0446\u0435\u0432 \u0441 \u043f\u0435\u0440\u0432\u043e\u0439 \u043f\u043e\u043a\u0443\u043f\u043a\u0438"}},"yaxis":{"anchor":"x","domain":[0.0,1.0],"autorange":"reversed","title":{"text":"\u041a\u043e\u0433\u043e\u0440\u0442\u0430"},"type":"category","dtick":1},"coloraxis":{"colorbar":{"title":{"text":"%"}},"colorscale":[[0.0,"rgb(247,251,255)"],[0.125,"rgb(222,235,247)"],[0.25,"rgb(198,219,239)"],[0.375,"rgb(158,202,225)"],[0.5,"rgb(107,174,214)"],[0.625,"rgb(66,146,198)"],[0.75,"rgb(33,113,181)"],[0.875,"rgb(8,81,156)"],[1.0,"rgb(8,48,107)"]],"autocolorscale":false,"showscale":false},"margin":{"l":0,"r":0,"t":10,"b":0},"height":520},                        {"responsive": true}                    ).then(function(){
+                            
+var gd = document.getElementById('5b51220d-66a8-4a0e-8621-ff8e710c7af8');
+var x = new MutationObserver(function (mutations, observer) {{
+        var display = window.getComputedStyle(gd).display;
+        if (!display || display === 'none') {{
+            console.log([gd, 'removed!']);
+            Plotly.purge(gd);
+            observer.disconnect();
+        }}
+}});
+
+// Listen for the removal of the full notebook cells
+var notebookContainer = gd.closest('#notebook-container');
+if (notebookContainer) {{
+    x.observe(notebookContainer, {childList: true});
+}}
+
+// Listen for the clearing of the current output cell
+var outputEl = gd.closest('.output');
+if (outputEl) {{
+    x.observe(outputEl, {childList: true});
+}}
+
+                        })                };            </script>        </div>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-cohorts-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Рисунок&nbsp;1: Доля клиентов когорты, купивших снова через N месяцев после первой покупки, %
+</figcaption>
+</figure>
+</div>
+</div>
+<p>В среднем через месяц после первой покупки возвращается 0,48% когорты, дальше — ещё меньше. Это не провал одного месяца, а свойство модели: на маркетплейс приходят за конкретной покупкой (крупнейшие категории по выручке — красота и здоровье, часы и подарки, товары для дома, спорт), а не за регулярными, как в продуктовом магазине.</p>
+<div id="dc70fed9" class="cell" data-execution_count="4">
+<div class="cell-output cell-output-display cell-output-markdown" data-execution_count="4">
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb2"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb2-1"><a href="#cb2-1" aria-hidden="true" tabindex="-1"></a><span class="co">-- Когорта = месяц первой покупки клиента; retention = доля когорты, купившая в месяце offset.</span></span>
+<span id="cb2-2"><a href="#cb2-2" aria-hidden="true" tabindex="-1"></a><span class="kw">create</span> <span class="kw">or</span> <span class="kw">replace</span> <span class="kw">view</span> customer_first <span class="kw">as</span></span>
+<span id="cb2-3"><a href="#cb2-3" aria-hidden="true" tabindex="-1"></a><span class="kw">select</span> customer_unique_id,</span>
+<span id="cb2-4"><a href="#cb2-4" aria-hidden="true" tabindex="-1"></a>       date_trunc(<span class="st">'month'</span>, <span class="fu">min</span>(purchased_at)) <span class="kw">as</span> cohort_month</span>
+<span id="cb2-5"><a href="#cb2-5" aria-hidden="true" tabindex="-1"></a><span class="kw">from</span> orders</span>
+<span id="cb2-6"><a href="#cb2-6" aria-hidden="true" tabindex="-1"></a><span class="kw">group</span> <span class="kw">by</span> <span class="dv">1</span>;</span>
+<span id="cb2-7"><a href="#cb2-7" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-8"><a href="#cb2-8" aria-hidden="true" tabindex="-1"></a><span class="kw">create</span> <span class="kw">or</span> <span class="kw">replace</span> <span class="kw">view</span> customer_activity <span class="kw">as</span></span>
+<span id="cb2-9"><a href="#cb2-9" aria-hidden="true" tabindex="-1"></a><span class="kw">select</span> <span class="kw">distinct</span> o.customer_unique_id, f.cohort_month,</span>
+<span id="cb2-10"><a href="#cb2-10" aria-hidden="true" tabindex="-1"></a>       date_diff(<span class="st">'month'</span>, f.cohort_month, date_trunc(<span class="st">'month'</span>, o.purchased_at)) <span class="kw">as</span> <span class="ot">"offset"</span></span>
+<span id="cb2-11"><a href="#cb2-11" aria-hidden="true" tabindex="-1"></a><span class="kw">from</span> orders o</span>
+<span id="cb2-12"><a href="#cb2-12" aria-hidden="true" tabindex="-1"></a><span class="kw">join</span> customer_first f <span class="kw">using</span> (customer_unique_id);</span>
+<span id="cb2-13"><a href="#cb2-13" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb2-14"><a href="#cb2-14" aria-hidden="true" tabindex="-1"></a><span class="kw">create</span> <span class="kw">or</span> <span class="kw">replace</span> <span class="kw">view</span> cohorts <span class="kw">as</span></span>
+<span id="cb2-15"><a href="#cb2-15" aria-hidden="true" tabindex="-1"></a><span class="kw">with</span> sizes <span class="kw">as</span> (</span>
+<span id="cb2-16"><a href="#cb2-16" aria-hidden="true" tabindex="-1"></a>    <span class="kw">select</span> cohort_month, <span class="fu">count</span>(<span class="op">*</span>) <span class="kw">as</span> cohort_size <span class="kw">from</span> customer_first <span class="kw">group</span> <span class="kw">by</span> <span class="dv">1</span></span>
+<span id="cb2-17"><a href="#cb2-17" aria-hidden="true" tabindex="-1"></a>),</span>
+<span id="cb2-18"><a href="#cb2-18" aria-hidden="true" tabindex="-1"></a>grid <span class="kw">as</span> (   <span class="co">-- все offset, которые когорта успела прожить, включая месяцы без покупок</span></span>
+<span id="cb2-19"><a href="#cb2-19" aria-hidden="true" tabindex="-1"></a>    <span class="kw">select</span> s.cohort_month, s.cohort_size, g.o <span class="kw">as</span> <span class="ot">"offset"</span></span>
+<span id="cb2-20"><a href="#cb2-20" aria-hidden="true" tabindex="-1"></a>    <span class="kw">from</span> sizes s,</span>
+<span id="cb2-21"><a href="#cb2-21" aria-hidden="true" tabindex="-1"></a>         generate_series(<span class="dv">0</span>, date_diff(<span class="st">'month'</span>, s.cohort_month,</span>
+<span id="cb2-22"><a href="#cb2-22" aria-hidden="true" tabindex="-1"></a>                                      (<span class="kw">select</span> date_trunc(<span class="st">'month'</span>, <span class="fu">max</span>(purchased_at)) <span class="kw">from</span> orders))) g(o)</span>
+<span id="cb2-23"><a href="#cb2-23" aria-hidden="true" tabindex="-1"></a>),</span>
+<span id="cb2-24"><a href="#cb2-24" aria-hidden="true" tabindex="-1"></a>active <span class="kw">as</span> (</span>
+<span id="cb2-25"><a href="#cb2-25" aria-hidden="true" tabindex="-1"></a>    <span class="kw">select</span> cohort_month, <span class="ot">"offset"</span>, <span class="fu">count</span>(<span class="op">*</span>) <span class="kw">as</span> customers</span>
+<span id="cb2-26"><a href="#cb2-26" aria-hidden="true" tabindex="-1"></a>    <span class="kw">from</span> customer_activity <span class="kw">group</span> <span class="kw">by</span> <span class="dv">1</span>, <span class="dv">2</span></span>
+<span id="cb2-27"><a href="#cb2-27" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb2-28"><a href="#cb2-28" aria-hidden="true" tabindex="-1"></a><span class="kw">select</span> g.cohort_month, g.<span class="ot">"offset"</span>,</span>
+<span id="cb2-29"><a href="#cb2-29" aria-hidden="true" tabindex="-1"></a>       <span class="fu">coalesce</span>(a.customers, <span class="dv">0</span>)                   <span class="kw">as</span> customers,</span>
+<span id="cb2-30"><a href="#cb2-30" aria-hidden="true" tabindex="-1"></a>       <span class="fu">coalesce</span>(a.customers, <span class="dv">0</span>) <span class="op">/</span> g.cohort_size   <span class="kw">as</span> retention,</span>
+<span id="cb2-31"><a href="#cb2-31" aria-hidden="true" tabindex="-1"></a>       g.cohort_size</span>
+<span id="cb2-32"><a href="#cb2-32" aria-hidden="true" tabindex="-1"></a><span class="kw">from</span> grid g</span>
+<span id="cb2-33"><a href="#cb2-33" aria-hidden="true" tabindex="-1"></a><span class="kw">left</span> <span class="kw">join</span> active a <span class="kw">using</span> (cohort_month, <span class="ot">"offset"</span>)</span>
+<span id="cb2-34"><a href="#cb2-34" aria-hidden="true" tabindex="-1"></a><span class="kw">order</span> <span class="kw">by</span> <span class="dv">1</span>, <span class="dv">2</span>;</span></code></pre></div><button title="Скопировать текст" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</div>
+</section>
+<section id="ltv-выручка-с-клиента-первый-заказ" class="level2">
+<h2 class="anchored" data-anchor-id="ltv-выручка-с-клиента-первый-заказ">LTV: выручка с клиента ≈ первый заказ</h2>
+<div id="cell-fig-ltv" class="cell" data-execution_count="5">
+<div id="fig-ltv" class="cell-output cell-output-display quarto-float quarto-figure quarto-figure-center anchored">
+<figure class="quarto-float quarto-float-fig figure">
+<div aria-describedby="fig-ltv-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div style="height:380px; width:100%;">            <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/3.2.2/es5/tex-svg.min.js"></script><script>if (window.MathJax && window.MathJax.Hub && window.MathJax.Hub.Config) {window.MathJax.Hub.Config({SVG: {font: "STIX-Web"}});}</script>                <script>window.PlotlyConfig = {MathJaxConfig: 'local'};</script>
+        <script charset="utf-8" src="https://cdn.plot.ly/plotly-4.1.1.min.js" integrity="sha256-O24V1F27f8pb0glCkelh3cVHLNiHAJ5gCaVtq2aNch8=" crossorigin="anonymous"></script>                <div id="cd04cab2-fa7f-447e-a703-b1b1b9560eae" class="plotly-graph-div" style="height:100%; width:100%;"></div>            <script>                window.PLOTLYENV=window.PLOTLYENV || {};                                if (document.getElementById("cd04cab2-fa7f-447e-a703-b1b1b9560eae")) {                    Plotly.newPlot(                        "cd04cab2-fa7f-447e-a703-b1b1b9560eae",                        [{"hovertemplate":"\u041a\u043e\u0433\u043e\u0440\u0442\u0430=2017-01\u003cbr\u003e\u041c\u0435\u0441\u044f\u0446\u0435\u0432 \u0441 \u043f\u0435\u0440\u0432\u043e\u0439 \u043f\u043e\u043a\u0443\u043f\u043a\u0438=%{x}\u003cbr\u003eR$ \u043d\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430=%{y}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"2017-01","line":{"color":"#636efa","dash":"solid","width":1.2},"marker":{"symbol":"circle"},"mode":"lines","name":"2017-01","orientation":"v","showlegend":true,"x":{"dtype":"i1","bdata":"AAECAwQFBgcICQoLDA0ODxAREg=="},"xaxis":"x","y":{"dtype":"f8","bdata":"1Uc2X6oxZkDXzTCfnTZmQGohw0m6O2ZAppO4t7k\u002fZkDS2MFMs0pmQItKhVHKTWZA3FjbqsZhZkDehviZdmZmQIydw2qPaGZAjJ3Dao9oZkCMSN\u002fUl3tmQG7kyLOPfmZAN2RJ3S6XZkAa\u002fTkB26ZmQFq8exIIq2ZAa4PvnbGvZkBF3MpIeLlmQMPYnyREyWZAw9ifJETJZkA="},"yaxis":"y","type":"scatter"},{"hovertemplate":"\u041a\u043e\u0433\u043e\u0440\u0442\u0430=2017-02\u003cbr\u003e\u041c\u0435\u0441\u044f\u0446\u0435\u0432 \u0441 \u043f\u0435\u0440\u0432\u043e\u0439 \u043f\u043e\u043a\u0443\u043f\u043a\u0438=%{x}\u003cbr\u003eR$ \u043d\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430=%{y}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"2017-02","line":{"color":"#EF553B","dash":"solid","width":1.2},"marker":{"symbol":"circle"},"mode":"lines","name":"2017-02","orientation":"v","showlegend":true,"x":{"dtype":"i1","bdata":"AAECAwQFBgcICQoLDA0ODxAREg=="},"xaxis":"x","y":{"dtype":"f8","bdata":"eEu4XU3RZEArZ8UmxdpkQH5uKIf85WRAU9pm+FHoZEABFquQ9v5kQMK\u002fRvxrAGVA0PMbl\u002fYNZUCJtAjaWhNlQNzL5718HGVAYx\u002fgzA8kZUAJ2fPcziplQOTwp1O9M2VA4bsscjo5ZUC76xquCEFlQI5SUsiaRGVAvlAKGktHZUDwzXrRBk1lQHmEEuBKVGVAeYQS4EpUZUA="},"yaxis":"y","type":"scatter"},{"hovertemplate":"\u041a\u043e\u0433\u043e\u0440\u0442\u0430=2017-03\u003cbr\u003e\u041c\u0435\u0441\u044f\u0446\u0435\u0432 \u0441 \u043f\u0435\u0440\u0432\u043e\u0439 \u043f\u043e\u043a\u0443\u043f\u043a\u0438=%{x}\u003cbr\u003eR$ \u043d\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430=%{y}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"2017-03","line":{"color":"#00cc96","dash":"solid","width":1.2},"marker":{"symbol":"circle"},"mode":"lines","name":"2017-03","orientation":"v","showlegend":true,"x":{"dtype":"i1","bdata":"AAECAwQFBgcICQoLDA0ODxAR"},"xaxis":"x","y":{"dtype":"f8","bdata":"ldiyhHSpZEBgm9FzNr5kQCcxJdNr1GRAfItlJeXrZEDAOq9QavtkQGXJMp69DWVA8F5dN40WZUC59vqg5SFlQJW0w42cM2VAIUTUXac2ZUBlNC4+7z9lQIk8lOrLRGVA34NhXGVQZUASe+ozclNlQL0JFAI8XGVAzpkzdWhlZUBMtie7A2hlQPomz5v1a2VA"},"yaxis":"y","type":"scatter"},{"hovertemplate":"\u041a\u043e\u0433\u043e\u0440\u0442\u0430=2017-04\u003cbr\u003e\u041c\u0435\u0441\u044f\u0446\u0435\u0432 \u0441 \u043f\u0435\u0440\u0432\u043e\u0439 \u043f\u043e\u043a\u0443\u043f\u043a\u0438=%{x}\u003cbr\u003eR$ \u043d\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430=%{y}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"2017-04","line":{"color":"#ab63fa","dash":"solid","width":1.2},"marker":{"symbol":"circle"},"mode":"lines","name":"2017-04","orientation":"v","showlegend":true,"x":{"dtype":"i1","bdata":"AAECAwQFBgcICQoLDA0ODxA="},"xaxis":"x","y":{"dtype":"f8","bdata":"GpcdlpmEZUDBCFS2Pa5lQEPhLPySu2VApOBN+1LGZUDmuMUkv9ZlQP4pP+7g52VAoO7TSGwFZkCSL6FR+BRmQBDLwTajImZAO5jlW7kpZkCT5pESizNmQHeqKqRoOGZAGZDlSuQ6ZkB6aHo8vj5mQLAb6MEFQ2ZAcYRfS+NGZkD8jDwuiVRmQA=="},"yaxis":"y","type":"scatter"},{"hovertemplate":"\u041a\u043e\u0433\u043e\u0440\u0442\u0430=2017-05\u003cbr\u003e\u041c\u0435\u0441\u044f\u0446\u0435\u0432 \u0441 \u043f\u0435\u0440\u0432\u043e\u0439 \u043f\u043e\u043a\u0443\u043f\u043a\u0438=%{x}\u003cbr\u003eR$ \u043d\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430=%{y}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"2017-05","line":{"color":"#FFA15A","dash":"solid","width":1.2},"marker":{"symbol":"circle"},"mode":"lines","name":"2017-05","orientation":"v","showlegend":true,"x":{"dtype":"i1","bdata":"AAECAwQFBgcICQoLDA0ODw=="},"xaxis":"x","y":{"dtype":"f8","bdata":"ih\u002fQrIBZZEBB5WMqZmtkQNWHYm7lhWRAkZWwg+GVZEBTVPxGL6FkQMhuYK9gsGRArDXFdjfMZEDnleDI2tFkQJg0PrTo4GRAwbewdHbtZECzUrP6\u002ffpkQNHfcV1UCGVA3fSKBiESZUAwJBz8tBJlQLr2Y83fGGVAHuZYqMsfZUA="},"yaxis":"y","type":"scatter"},{"hovertemplate":"\u041a\u043e\u0433\u043e\u0440\u0442\u0430=2017-06\u003cbr\u003e\u041c\u0435\u0441\u044f\u0446\u0435\u0432 \u0441 \u043f\u0435\u0440\u0432\u043e\u0439 \u043f\u043e\u043a\u0443\u043f\u043a\u0438=%{x}\u003cbr\u003eR$ \u043d\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430=%{y}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"2017-06","line":{"color":"#19d3f3","dash":"solid","width":1.2},"marker":{"symbol":"circle"},"mode":"lines","name":"2017-06","orientation":"v","showlegend":true,"x":{"dtype":"i1","bdata":"AAECAwQFBgcICQoLDA0O"},"xaxis":"x","y":{"dtype":"f8","bdata":"AH9slg\u002ftY0Ax4TJW1wNkQB7Y6T5pGmRASZpAiA4qZEDoYQ3DKzlkQIF25Ir7SWRAzq4SL9taZEAyH\u002fLDhmNkQFi2RsQsZ2RAhcHfLmpsZECtwC7+7oNkQIf05MCrmWRApVS2tBSfZECqD3hIH6pkQLeoaMD7w2RA"},"yaxis":"y","type":"scatter"},{"hovertemplate":"\u041a\u043e\u0433\u043e\u0440\u0442\u0430=2017-07\u003cbr\u003e\u041c\u0435\u0441\u044f\u0446\u0435\u0432 \u0441 \u043f\u0435\u0440\u0432\u043e\u0439 \u043f\u043e\u043a\u0443\u043f\u043a\u0438=%{x}\u003cbr\u003eR$ \u043d\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430=%{y}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"2017-07","line":{"color":"#FF6692","dash":"solid","width":1.2},"marker":{"symbol":"circle"},"mode":"lines","name":"2017-07","orientation":"v","showlegend":true,"x":{"dtype":"i1","bdata":"AAECAwQFBgcICQoLDA0="},"xaxis":"x","y":{"dtype":"f8","bdata":"+82dFHycYkCcvQ1UqrZiQB4s2ITQwWJAalHxhKzLYkBsMC1OFNZiQB1eRJ\u002f85WJAZlU9scH7YkAMpscs5P1iQHrA78JrAWNAfUG9jRQTY0CdAsEt\u002fxxjQMDntRPIJ2NApW4XdMwzY0DISwGlRTtjQA=="},"yaxis":"y","type":"scatter"},{"hovertemplate":"\u041a\u043e\u0433\u043e\u0440\u0442\u0430=2017-08\u003cbr\u003e\u041c\u0435\u0441\u044f\u0446\u0435\u0432 \u0441 \u043f\u0435\u0440\u0432\u043e\u0439 \u043f\u043e\u043a\u0443\u043f\u043a\u0438=%{x}\u003cbr\u003eR$ \u043d\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430=%{y}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"2017-08","line":{"color":"#B6E880","dash":"solid","width":1.2},"marker":{"symbol":"circle"},"mode":"lines","name":"2017-08","orientation":"v","showlegend":true,"x":{"dtype":"i1","bdata":"AAECAwQFBgcICQoLDA=="},"xaxis":"x","y":{"dtype":"f8","bdata":"46fSvKaUY0CxVst\u002fibxjQJy0ImoezmNAX4tlKR\u002fWY0BUg3cq9+NjQPDcaUq2+mNARxHIj2sJZEA13Im1zBhkQPd+ZmD\u002fJmRAUQ25XIAwZEBk2lnBBDxkQDun5w1rSmRA3NmcER5PZEA="},"yaxis":"y","type":"scatter"},{"hovertemplate":"\u041a\u043e\u0433\u043e\u0440\u0442\u0430=2017-09\u003cbr\u003e\u041c\u0435\u0441\u044f\u0446\u0435\u0432 \u0441 \u043f\u0435\u0440\u0432\u043e\u0439 \u043f\u043e\u043a\u0443\u043f\u043a\u0438=%{x}\u003cbr\u003eR$ \u043d\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430=%{y}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"2017-09","line":{"color":"#FF97FF","dash":"solid","width":1.2},"marker":{"symbol":"circle"},"mode":"lines","name":"2017-09","orientation":"v","showlegend":true,"x":{"dtype":"i1","bdata":"AAECAwQFBgcICQoL"},"xaxis":"x","y":{"dtype":"f8","bdata":"4Udj+m6HZUDQpALuq6RlQJkzJbIZvmVAplAQ71\u002fLZUA4FRfsJuVlQB5q0zWU9WVAuNbCZBv+ZUDC5tjr0QVmQCd9RU4nD2ZApUW28\u002f0UZkD40nmVih5mQGTCEgMmIWZA"},"yaxis":"y","type":"scatter"},{"hovertemplate":"\u041a\u043e\u0433\u043e\u0440\u0442\u0430=2017-10\u003cbr\u003e\u041c\u0435\u0441\u044f\u0446\u0435\u0432 \u0441 \u043f\u0435\u0440\u0432\u043e\u0439 \u043f\u043e\u043a\u0443\u043f\u043a\u0438=%{x}\u003cbr\u003eR$ \u043d\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430=%{y}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"2017-10","line":{"color":"#FECB52","dash":"solid","width":1.2},"marker":{"symbol":"circle"},"mode":"lines","name":"2017-10","orientation":"v","showlegend":true,"x":{"dtype":"i1","bdata":"AAECAwQFBgcICQo="},"xaxis":"x","y":{"dtype":"f8","bdata":"f0GM1lVNZUABsjSgMG5lQLG59kFXemVADob+FZ5+ZUDtS4GNnIllQB9r0agFlGVAAjbvGi2cZUBH76P\u002fRq5lQKFqg92lv2VA+pBBmETOZUCfc5RpXtVlQA=="},"yaxis":"y","type":"scatter"},{"hovertemplate":"\u041a\u043e\u0433\u043e\u0440\u0442\u0430=2017-11\u003cbr\u003e\u041c\u0435\u0441\u044f\u0446\u0435\u0432 \u0441 \u043f\u0435\u0440\u0432\u043e\u0439 \u043f\u043e\u043a\u0443\u043f\u043a\u0438=%{x}\u003cbr\u003eR$ \u043d\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430=%{y}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"2017-11","line":{"color":"#636efa","dash":"solid","width":1.2},"marker":{"symbol":"circle"},"mode":"lines","name":"2017-11","orientation":"v","showlegend":true,"x":{"dtype":"i1","bdata":"AAECAwQFBgcICQ=="},"xaxis":"x","y":{"dtype":"f8","bdata":"re7e2YMaZEDVbRoQID9kQD3YDhQdUWRAjzIdh1BYZEBhwm7S8GFkQJJmpWyHamRAwBYvUqpvZEAawGd34HdkQFbaCx\u002fgfWRATIJ6FPOAZEA="},"yaxis":"y","type":"scatter"},{"hovertemplate":"\u041a\u043e\u0433\u043e\u0440\u0442\u0430=2017-12\u003cbr\u003e\u041c\u0435\u0441\u044f\u0446\u0435\u0432 \u0441 \u043f\u0435\u0440\u0432\u043e\u0439 \u043f\u043e\u043a\u0443\u043f\u043a\u0438=%{x}\u003cbr\u003eR$ \u043d\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430=%{y}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"2017-12","line":{"color":"#EF553B","dash":"solid","width":1.2},"marker":{"symbol":"circle"},"mode":"lines","name":"2017-12","orientation":"v","showlegend":true,"x":{"dtype":"i1","bdata":"AAECAwQFBgcI"},"xaxis":"x","y":{"dtype":"f8","bdata":"Y6HwLTJNY0AsHbYxZ1tjQH5BlwDuZmNAzVUuF+5zY0BWt3g4rX9jQEwbfj\u002f\u002fi2NAFe3G64qTY0CRT6Y8QJVjQNKPqniBnmNA"},"yaxis":"y","type":"scatter"},{"hovertemplate":"\u041a\u043e\u0433\u043e\u0440\u0442\u0430=2018-01\u003cbr\u003e\u041c\u0435\u0441\u044f\u0446\u0435\u0432 \u0441 \u043f\u0435\u0440\u0432\u043e\u0439 \u043f\u043e\u043a\u0443\u043f\u043a\u0438=%{x}\u003cbr\u003eR$ \u043d\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430=%{y}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"2018-01","line":{"color":"#00cc96","dash":"solid","width":1.2},"marker":{"symbol":"circle"},"mode":"lines","name":"2018-01","orientation":"v","showlegend":true,"x":{"dtype":"i1","bdata":"AAECAwQFBgc="},"xaxis":"x","y":{"dtype":"f8","bdata":"xVx27ctRY0Baypx93mJjQBGN8BsbdGNA94u6LheEY0Cy0plSi5BjQLgRA7\u002f2l2NAIV6xAHueY0D7KVKXKqZjQA=="},"yaxis":"y","type":"scatter"},{"hovertemplate":"\u041a\u043e\u0433\u043e\u0440\u0442\u0430=2018-02\u003cbr\u003e\u041c\u0435\u0441\u044f\u0446\u0435\u0432 \u0441 \u043f\u0435\u0440\u0432\u043e\u0439 \u043f\u043e\u043a\u0443\u043f\u043a\u0438=%{x}\u003cbr\u003eR$ \u043d\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430=%{y}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"2018-02","line":{"color":"#ab63fa","dash":"solid","width":1.2},"marker":{"symbol":"circle"},"mode":"lines","name":"2018-02","orientation":"v","showlegend":true,"x":{"dtype":"i1","bdata":"AAECAwQFBg=="},"xaxis":"x","y":{"dtype":"f8","bdata":"h8I3JFLiYkAMxlBktvFiQHehTGM9B2NAxlKYaiUZY0B8VTBhLiRjQItCZ6W0M2NAOXKBmIM8Y0A="},"yaxis":"y","type":"scatter"},{"hovertemplate":"\u041a\u043e\u0433\u043e\u0440\u0442\u0430=2018-03\u003cbr\u003e\u041c\u0435\u0441\u044f\u0446\u0435\u0432 \u0441 \u043f\u0435\u0440\u0432\u043e\u0439 \u043f\u043e\u043a\u0443\u043f\u043a\u0438=%{x}\u003cbr\u003eR$ \u043d\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430=%{y}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"2018-03","line":{"color":"#FFA15A","dash":"solid","width":1.2},"marker":{"symbol":"circle"},"mode":"lines","name":"2018-03","orientation":"v","showlegend":true,"x":{"dtype":"i1","bdata":"AAECAwQF"},"xaxis":"x","y":{"dtype":"f8","bdata":"BVMMGpJQZEB2WHvIA19kQE4JZyusb2RAqo5RyBd\u002fZEAvt8cohYVkQHiQO5H5h2RA"},"yaxis":"y","type":"scatter"},{"hovertemplate":"\u041a\u043e\u0433\u043e\u0440\u0442\u0430=2018-04\u003cbr\u003e\u041c\u0435\u0441\u044f\u0446\u0435\u0432 \u0441 \u043f\u0435\u0440\u0432\u043e\u0439 \u043f\u043e\u043a\u0443\u043f\u043a\u0438=%{x}\u003cbr\u003eR$ \u043d\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430=%{y}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"2018-04","line":{"color":"#19d3f3","dash":"solid","width":1.2},"marker":{"symbol":"circle"},"mode":"lines","name":"2018-04","orientation":"v","showlegend":true,"x":{"dtype":"i1","bdata":"AAECAwQ="},"xaxis":"x","y":{"dtype":"f8","bdata":"RdeqQtoKZUACdkhYmSNlQN77eXQCNWVAhRfd0C4+ZUDnjJ58T0JlQA=="},"yaxis":"y","type":"scatter"},{"hovertemplate":"\u041a\u043e\u0433\u043e\u0440\u0442\u0430=2018-05\u003cbr\u003e\u041c\u0435\u0441\u044f\u0446\u0435\u0432 \u0441 \u043f\u0435\u0440\u0432\u043e\u0439 \u043f\u043e\u043a\u0443\u043f\u043a\u0438=%{x}\u003cbr\u003eR$ \u043d\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430=%{y}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"2018-05","line":{"color":"#FF6692","dash":"solid","width":1.2},"marker":{"symbol":"circle"},"mode":"lines","name":"2018-05","orientation":"v","showlegend":true,"x":{"dtype":"i1","bdata":"AAECAw=="},"xaxis":"x","y":{"dtype":"f8","bdata":"H96DuIkiZUBEF1xIPUtlQPfdVnIjWGVAaRqrWn5gZUA="},"yaxis":"y","type":"scatter"},{"hovertemplate":"\u041a\u043e\u0433\u043e\u0440\u0442\u0430=2018-06\u003cbr\u003e\u041c\u0435\u0441\u044f\u0446\u0435\u0432 \u0441 \u043f\u0435\u0440\u0432\u043e\u0439 \u043f\u043e\u043a\u0443\u043f\u043a\u0438=%{x}\u003cbr\u003eR$ \u043d\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430=%{y}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"2018-06","line":{"color":"#B6E880","dash":"solid","width":1.2},"marker":{"symbol":"circle"},"mode":"lines","name":"2018-06","orientation":"v","showlegend":true,"x":{"dtype":"i1","bdata":"AAEC"},"xaxis":"x","y":{"dtype":"f8","bdata":"jsvCXAjhZEChBr9oCfJkQJ5\u002f9tDi\u002fGRA"},"yaxis":"y","type":"scatter"},{"hovertemplate":"\u041a\u043e\u0433\u043e\u0440\u0442\u0430=2018-07\u003cbr\u003e\u041c\u0435\u0441\u044f\u0446\u0435\u0432 \u0441 \u043f\u0435\u0440\u0432\u043e\u0439 \u043f\u043e\u043a\u0443\u043f\u043a\u0438=%{x}\u003cbr\u003eR$ \u043d\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430=%{y}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"2018-07","line":{"color":"#FF97FF","dash":"solid","width":1.2},"marker":{"symbol":"circle"},"mode":"lines","name":"2018-07","orientation":"v","showlegend":true,"x":{"dtype":"i1","bdata":"AAE="},"xaxis":"x","y":{"dtype":"f8","bdata":"jgH1RnUXZUCV6bzixy9lQA=="},"yaxis":"y","type":"scatter"},{"hovertemplate":"\u041a\u043e\u0433\u043e\u0440\u0442\u0430=2018-08\u003cbr\u003e\u041c\u0435\u0441\u044f\u0446\u0435\u0432 \u0441 \u043f\u0435\u0440\u0432\u043e\u0439 \u043f\u043e\u043a\u0443\u043f\u043a\u0438=%{x}\u003cbr\u003eR$ \u043d\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430=%{y}\u003cextra\u003e\u003c\u002fextra\u003e","legendgroup":"2018-08","line":{"color":"#FECB52","dash":"solid","width":1.2},"marker":{"symbol":"circle"},"mode":"lines","name":"2018-08","orientation":"v","showlegend":true,"x":{"dtype":"i1","bdata":"AA=="},"xaxis":"x","y":{"dtype":"f8","bdata":"D9ejcMiXY0A="},"yaxis":"y","type":"scatter"}],                        {"template":{"data":{"histogram2dcontour":[{"type":"histogram2dcontour","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"choropleth":[{"type":"choropleth","colorbar":{"outlinewidth":0,"ticks":""}}],"histogram2d":[{"type":"histogram2d","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"heatmap":[{"type":"heatmap","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"contourcarpet":[{"type":"contourcarpet","colorbar":{"outlinewidth":0,"ticks":""}}],"contour":[{"type":"contour","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"surface":[{"type":"surface","colorbar":{"outlinewidth":0,"ticks":""},"colorscale":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]]}],"mesh3d":[{"type":"mesh3d","colorbar":{"outlinewidth":0,"ticks":""}}],"scatter":[{"fillpattern":{"fillmode":"overlay","size":10,"solidity":0.2},"type":"scatter"}],"parcoords":[{"type":"parcoords","line":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterpolargl":[{"type":"scatterpolargl","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"bar":[{"error_x":{"color":"#2a3f5f"},"error_y":{"color":"#2a3f5f"},"marker":{"line":{"color":"#E5ECF6","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"bar"}],"scattergeo":[{"type":"scattergeo","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterpolar":[{"type":"scatterpolar","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"histogram":[{"marker":{"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"histogram"}],"scattergl":[{"type":"scattergl","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatter3d":[{"type":"scatter3d","line":{"colorbar":{"outlinewidth":0,"ticks":""}},"marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattermap":[{"type":"scattermap","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scatterternary":[{"type":"scatterternary","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"scattercarpet":[{"type":"scattercarpet","marker":{"colorbar":{"outlinewidth":0,"ticks":""}}}],"carpet":[{"aaxis":{"endlinecolor":"#2a3f5f","gridcolor":"white","linecolor":"white","minorgridcolor":"white","startlinecolor":"#2a3f5f"},"baxis":{"endlinecolor":"#2a3f5f","gridcolor":"white","linecolor":"white","minorgridcolor":"white","startlinecolor":"#2a3f5f"},"type":"carpet"}],"table":[{"cells":{"fill":{"color":"#EBF0F8"},"line":{"color":"white"}},"header":{"fill":{"color":"#C8D4E3"},"line":{"color":"white"}},"type":"table"}],"barpolar":[{"marker":{"line":{"color":"#E5ECF6","width":0.5},"pattern":{"fillmode":"overlay","size":10,"solidity":0.2}},"type":"barpolar"}],"pie":[{"automargin":true,"type":"pie"}]},"layout":{"autotypenumbers":"strict","colorway":["#636efa","#EF553B","#00cc96","#ab63fa","#FFA15A","#19d3f3","#FF6692","#B6E880","#FF97FF","#FECB52"],"font":{"color":"#2a3f5f"},"hovermode":"closest","hoverlabel":{"align":"left"},"paper_bgcolor":"white","plot_bgcolor":"#E5ECF6","polar":{"bgcolor":"#E5ECF6","angularaxis":{"gridcolor":"white","linecolor":"white","ticks":""},"radialaxis":{"gridcolor":"white","linecolor":"white","ticks":""}},"ternary":{"bgcolor":"#E5ECF6","aaxis":{"gridcolor":"white","linecolor":"white","ticks":""},"baxis":{"gridcolor":"white","linecolor":"white","ticks":""},"caxis":{"gridcolor":"white","linecolor":"white","ticks":""}},"coloraxis":{"colorbar":{"outlinewidth":0,"ticks":""}},"colorscale":{"sequential":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"sequentialminus":[[0.0,"#0d0887"],[0.1111111111111111,"#46039f"],[0.2222222222222222,"#7201a8"],[0.3333333333333333,"#9c179e"],[0.4444444444444444,"#bd3786"],[0.5555555555555556,"#d8576b"],[0.6666666666666666,"#ed7953"],[0.7777777777777778,"#fb9f3a"],[0.8888888888888888,"#fdca26"],[1.0,"#f0f921"]],"diverging":[[0,"#8e0152"],[0.1,"#c51b7d"],[0.2,"#de77ae"],[0.3,"#f1b6da"],[0.4,"#fde0ef"],[0.5,"#f7f7f7"],[0.6,"#e6f5d0"],[0.7,"#b8e186"],[0.8,"#7fbc41"],[0.9,"#4d9221"],[1,"#276419"]]},"xaxis":{"gridcolor":"white","linecolor":"white","ticks":"","title":{"standoff":15},"zerolinecolor":"white","automargin":true,"zerolinewidth":2},"yaxis":{"gridcolor":"white","linecolor":"white","ticks":"","title":{"standoff":15},"zerolinecolor":"white","automargin":true,"zerolinewidth":2},"scene":{"xaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2},"yaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2},"zaxis":{"backgroundcolor":"#E5ECF6","gridcolor":"white","linecolor":"white","showbackground":true,"ticks":"","zerolinecolor":"white","gridwidth":2}},"shapedefaults":{"line":{"color":"#2a3f5f"}},"annotationdefaults":{"arrowcolor":"#2a3f5f","arrowhead":0,"arrowwidth":1},"geo":{"bgcolor":"white","landcolor":"#E5ECF6","subunitcolor":"white","showland":true,"showlakes":true,"lakecolor":"white"},"title":{"x":0.05},"margin":{"b":0,"l":0,"r":0,"t":30}}},"xaxis":{"anchor":"y","domain":[0.0,1.0],"title":{"text":"\u041c\u0435\u0441\u044f\u0446\u0435\u0432 \u0441 \u043f\u0435\u0440\u0432\u043e\u0439 \u043f\u043e\u043a\u0443\u043f\u043a\u0438"}},"yaxis":{"anchor":"x","domain":[0.0,1.0],"title":{"text":"R$ \u043d\u0430 \u043a\u043b\u0438\u0435\u043d\u0442\u0430"}},"legend":{"title":{"text":"\u041a\u043e\u0433\u043e\u0440\u0442\u0430"},"tracegroupgap":0},"margin":{"l":0,"r":0,"t":10,"b":0},"height":380,"showlegend":false},                        {"responsive": true}                    ).then(function(){
+                            
+var gd = document.getElementById('cd04cab2-fa7f-447e-a703-b1b1b9560eae');
+var x = new MutationObserver(function (mutations, observer) {{
+        var display = window.getComputedStyle(gd).display;
+        if (!display || display === 'none') {{
+            console.log([gd, 'removed!']);
+            Plotly.purge(gd);
+            observer.disconnect();
+        }}
+}});
+
+// Listen for the removal of the full notebook cells
+var notebookContainer = gd.closest('#notebook-container');
+if (notebookContainer) {{
+    x.observe(notebookContainer, {childList: true});
+}}
+
+// Listen for the clearing of the current output cell
+var outputEl = gd.closest('.output');
+if (outputEl) {{
+    x.observe(outputEl, {childList: true});
+}}
+
+                        })                };            </script>        </div>
+</div>
+<figcaption class="quarto-float-caption-bottom quarto-float-caption quarto-float-fig" id="fig-ltv-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Рисунок&nbsp;2: Накопленная выручка на клиента по когортам, R$ (линия — когорта)
+</figcaption>
+</figure>
+</div>
+</div>
+<p>Линии почти горизонтальные: у 8 когорт, проживших год, выручка на клиента за 12 месяцев выросла в среднем на 3,0%. Для юнит-экономики это значит: стоимость привлечения клиента (CAC) должна окупаться маржой <strong>первого</strong> заказа — рассчитывать на возврат денег через повторные покупки нельзя.</p>
+</section>
+<section id="доставка-7-заказов-треть-негатива" class="level2">
+<h2 class="anchored" data-anchor-id="доставка-7-заказов-треть-негатива">Доставка: 7% заказов — треть негатива</h2>
+<div class="cell" data-execution_count="6">
+<div id="tbl-delivery" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="6">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-delivery-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Таблица&nbsp;1: Отзывы и повторные покупки в зависимости от опоздания доставки относительно обещанной даты
+</figcaption>
+<div aria-describedby="tbl-delivery-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output cell-output-display" data-execution_count="6">
+<style type="text/css">
+</style>
+
+<table id="T_34358" class="cell caption-top table table-sm table-striped small">
+<thead>
+<tr class="header">
+<th id="T_34358_level0_col0" class="col_heading level0 col0" data-quarto-table-cell-role="th">Доставка</th>
+<th id="T_34358_level0_col1" class="col_heading level0 col1" data-quarto-table-cell-role="th">Заказов</th>
+<th id="T_34358_level0_col2" class="col_heading level0 col2" data-quarto-table-cell-role="th">Средняя оценка</th>
+<th id="T_34358_level0_col3" class="col_heading level0 col3" data-quarto-table-cell-role="th">Оценки 1–2</th>
+<th id="T_34358_level0_col4" class="col_heading level0 col4" data-quarto-table-cell-role="th">Вернулись после первого заказа</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td id="T_34358_row0_col0" class="data row0 col0">раньше на 7+ дней</td>
+<td id="T_34358_row0_col1" class="data row0 col1">75 882</td>
+<td id="T_34358_row0_col2" class="data row0 col2">4,31</td>
+<td id="T_34358_row0_col3" class="data row0 col3">9%</td>
+<td id="T_34358_row0_col4" class="data row0 col4">3,1%</td>
+</tr>
+<tr class="even">
+<td id="T_34358_row1_col0" class="data row1 col0">в срок</td>
+<td id="T_34358_row1_col1" class="data row1 col1">13 790</td>
+<td id="T_34358_row1_col2" class="data row1 col2">4,17</td>
+<td id="T_34358_row1_col3" class="data row1 col3">11%</td>
+<td id="T_34358_row1_col4" class="data row1 col4">2,4%</td>
+</tr>
+<tr class="odd">
+<td id="T_34358_row2_col0" class="data row2 col0">1–3 дня</td>
+<td id="T_34358_row2_col1" class="data row2 col1">1 869</td>
+<td id="T_34358_row2_col2" class="data row2 col2">3,29</td>
+<td id="T_34358_row2_col3" class="data row2 col3">32%</td>
+<td id="T_34358_row2_col4" class="data row2 col4">2,4%</td>
+</tr>
+<tr class="even">
+<td id="T_34358_row3_col0" class="data row3 col0">4–7 дней</td>
+<td id="T_34358_row3_col1" class="data row3 col1">1 802</td>
+<td id="T_34358_row3_col2" class="data row3 col2">2,10</td>
+<td id="T_34358_row3_col3" class="data row3 col3">68%</td>
+<td id="T_34358_row3_col4" class="data row3 col4">2,4%</td>
+</tr>
+<tr class="odd">
+<td id="T_34358_row4_col0" class="data row4 col0">8+ дней</td>
+<td id="T_34358_row4_col1" class="data row4 col1">2 860</td>
+<td id="T_34358_row4_col2" class="data row4 col2">1,70</td>
+<td id="T_34358_row4_col3" class="data row4 col3">79%</td>
+<td id="T_34358_row4_col4" class="data row4 col4">2,7%</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<p>Срок, который обещает Olist, консервативный: 79% заказов приезжает больше чем на неделю раньше. Но если заказ опаздывает, оценка падает резко: с 4,2 до 1,7 при опоздании на 8+ дней, и уже 79% таких отзывов — на 1–2 звезды. На повторные покупки опоздание почти не влияет (2,4% против 2,7%) — возвращаются мало в любом случае.</p>
+<p>Опоздания сосредоточены в отдельных штатах:</p>
+<div class="cell" data-execution_count="7">
+<div id="tbl-states" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="7">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-states-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Таблица&nbsp;2: Восемь крупнейших штатов: доля опоздавших заказов и средняя оценка
+</figcaption>
+<div aria-describedby="tbl-states-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output cell-output-display" data-execution_count="7">
+<style type="text/css">
+</style>
+
+<table id="T_f5519" class="cell caption-top table table-sm table-striped small">
+<thead>
+<tr class="header">
+<th id="T_f5519_level0_col0" class="col_heading level0 col0" data-quarto-table-cell-role="th">Штат</th>
+<th id="T_f5519_level0_col1" class="col_heading level0 col1" data-quarto-table-cell-role="th">Заказов</th>
+<th id="T_f5519_level0_col2" class="col_heading level0 col2" data-quarto-table-cell-role="th">Опоздали</th>
+<th id="T_f5519_level0_col3" class="col_heading level0 col3" data-quarto-table-cell-role="th">Средняя оценка</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td id="T_f5519_row0_col0" class="data row0 col0">SP</td>
+<td id="T_f5519_row0_col1" class="data row0 col1">40 399</td>
+<td id="T_f5519_row0_col2" class="data row0 col2">4,5%</td>
+<td id="T_f5519_row0_col3" class="data row0 col3">4,25</td>
+</tr>
+<tr class="even">
+<td id="T_f5519_row1_col0" class="data row1 col0">RJ</td>
+<td id="T_f5519_row1_col1" class="data row1 col1">12 310</td>
+<td id="T_f5519_row1_col2" class="data row1 col2">12,1%</td>
+<td id="T_f5519_row1_col3" class="data row1 col3">3,97</td>
+</tr>
+<tr class="odd">
+<td id="T_f5519_row2_col0" class="data row2 col0">MG</td>
+<td id="T_f5519_row2_col1" class="data row2 col1">11 319</td>
+<td id="T_f5519_row2_col2" class="data row2 col2">4,6%</td>
+<td id="T_f5519_row2_col3" class="data row2 col3">4,19</td>
+</tr>
+<tr class="even">
+<td id="T_f5519_row3_col0" class="data row3 col0">RS</td>
+<td id="T_f5519_row3_col1" class="data row3 col1">5 327</td>
+<td id="T_f5519_row3_col2" class="data row3 col2">6,1%</td>
+<td id="T_f5519_row3_col3" class="data row3 col3">4,19</td>
+</tr>
+<tr class="odd">
+<td id="T_f5519_row4_col0" class="data row4 col0">PR</td>
+<td id="T_f5519_row4_col1" class="data row4 col1">4 903</td>
+<td id="T_f5519_row4_col2" class="data row4 col2">4,1%</td>
+<td id="T_f5519_row4_col3" class="data row4 col3">4,24</td>
+</tr>
+<tr class="even">
+<td id="T_f5519_row5_col0" class="data row5 col0">SC</td>
+<td id="T_f5519_row5_col1" class="data row5 col1">3 537</td>
+<td id="T_f5519_row5_col2" class="data row5 col2">8,2%</td>
+<td id="T_f5519_row5_col3" class="data row5 col3">4,13</td>
+</tr>
+<tr class="odd">
+<td id="T_f5519_row6_col0" class="data row6 col0">BA</td>
+<td id="T_f5519_row6_col1" class="data row6 col1">3 253</td>
+<td id="T_f5519_row6_col2" class="data row6 col2">12,2%</td>
+<td id="T_f5519_row6_col3" class="data row6 col3">3,93</td>
+</tr>
+<tr class="even">
+<td id="T_f5519_row7_col0" class="data row7 col0">DF</td>
+<td id="T_f5519_row7_col1" class="data row7 col1">2 074</td>
+<td id="T_f5519_row7_col2" class="data row7 col2">5,7%</td>
+<td id="T_f5519_row7_col3" class="data row7 col3">4,13</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<div id="d4adb206" class="cell" data-execution_count="8">
+<div class="cell-output cell-output-display cell-output-markdown" data-execution_count="8">
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb3"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb3-1"><a href="#cb3-1" aria-hidden="true" tabindex="-1"></a><span class="co">-- Опоздание доставки → оценка в отзыве → вернулся ли клиент.</span></span>
+<span id="cb3-2"><a href="#cb3-2" aria-hidden="true" tabindex="-1"></a><span class="co">-- Срок, который Olist обещает, консервативный: большинство заказов приезжает на 1–2 недели раньше.</span></span>
+<span id="cb3-3"><a href="#cb3-3" aria-hidden="true" tabindex="-1"></a><span class="co">-- repeat_rate считается по первым заказам клиентов: доля тех, кто после него купил ещё раз.</span></span>
+<span id="cb3-4"><a href="#cb3-4" aria-hidden="true" tabindex="-1"></a><span class="kw">create</span> <span class="kw">or</span> <span class="kw">replace</span> <span class="kw">view</span> delivery_orders <span class="kw">as</span></span>
+<span id="cb3-5"><a href="#cb3-5" aria-hidden="true" tabindex="-1"></a><span class="kw">select</span> o.<span class="op">*</span>,</span>
+<span id="cb3-6"><a href="#cb3-6" aria-hidden="true" tabindex="-1"></a>       date_diff(<span class="st">'day'</span>, o.estimated_at:<span class="ch">:date</span>, o.delivered_at:<span class="ch">:date</span>)  <span class="kw">as</span> delay_days,</span>
+<span id="cb3-7"><a href="#cb3-7" aria-hidden="true" tabindex="-1"></a>       <span class="cf">case</span></span>
+<span id="cb3-8"><a href="#cb3-8" aria-hidden="true" tabindex="-1"></a>           <span class="cf">when</span> date_diff(<span class="st">'day'</span>, o.estimated_at:<span class="ch">:date</span>, o.delivered_at:<span class="ch">:date</span>) <span class="op">&lt;=</span> <span class="op">-</span><span class="dv">7</span> <span class="cf">then</span> <span class="st">'раньше на 7+ дней'</span></span>
+<span id="cb3-9"><a href="#cb3-9" aria-hidden="true" tabindex="-1"></a>           <span class="cf">when</span> date_diff(<span class="st">'day'</span>, o.estimated_at:<span class="ch">:date</span>, o.delivered_at:<span class="ch">:date</span>) <span class="op">&lt;=</span> <span class="dv">0</span>  <span class="cf">then</span> <span class="st">'в срок'</span></span>
+<span id="cb3-10"><a href="#cb3-10" aria-hidden="true" tabindex="-1"></a>           <span class="cf">when</span> date_diff(<span class="st">'day'</span>, o.estimated_at:<span class="ch">:date</span>, o.delivered_at:<span class="ch">:date</span>) <span class="op">&lt;=</span> <span class="dv">3</span>  <span class="cf">then</span> <span class="st">'1–3 дня'</span></span>
+<span id="cb3-11"><a href="#cb3-11" aria-hidden="true" tabindex="-1"></a>           <span class="cf">when</span> date_diff(<span class="st">'day'</span>, o.estimated_at:<span class="ch">:date</span>, o.delivered_at:<span class="ch">:date</span>) <span class="op">&lt;=</span> <span class="dv">7</span>  <span class="cf">then</span> <span class="st">'4–7 дней'</span></span>
+<span id="cb3-12"><a href="#cb3-12" aria-hidden="true" tabindex="-1"></a>           <span class="cf">else</span> <span class="st">'8+ дней'</span></span>
+<span id="cb3-13"><a href="#cb3-13" aria-hidden="true" tabindex="-1"></a>       <span class="cf">end</span> <span class="kw">as</span> bucket,</span>
+<span id="cb3-14"><a href="#cb3-14" aria-hidden="true" tabindex="-1"></a>       r.review_score,</span>
+<span id="cb3-15"><a href="#cb3-15" aria-hidden="true" tabindex="-1"></a>       <span class="fu">row_number</span>() <span class="kw">over</span> (<span class="kw">partition</span> <span class="kw">by</span> o.customer_unique_id <span class="kw">order</span> <span class="kw">by</span> o.purchased_at, o.order_id) <span class="op">=</span> <span class="dv">1</span> <span class="kw">as</span> is_first,</span>
+<span id="cb3-16"><a href="#cb3-16" aria-hidden="true" tabindex="-1"></a>       <span class="fu">count</span>(<span class="op">*</span>)     <span class="kw">over</span> (<span class="kw">partition</span> <span class="kw">by</span> o.customer_unique_id) <span class="op">&gt;</span> <span class="dv">1</span>                         <span class="kw">as</span> customer_repeated</span>
+<span id="cb3-17"><a href="#cb3-17" aria-hidden="true" tabindex="-1"></a><span class="kw">from</span> orders o</span>
+<span id="cb3-18"><a href="#cb3-18" aria-hidden="true" tabindex="-1"></a><span class="kw">left</span> <span class="kw">join</span> order_reviews r <span class="kw">using</span> (order_id)</span>
+<span id="cb3-19"><a href="#cb3-19" aria-hidden="true" tabindex="-1"></a><span class="kw">where</span> o.delivered_at <span class="kw">is</span> <span class="kw">not</span> <span class="kw">null</span>;</span>
+<span id="cb3-20"><a href="#cb3-20" aria-hidden="true" tabindex="-1"></a></span>
+<span id="cb3-21"><a href="#cb3-21" aria-hidden="true" tabindex="-1"></a><span class="kw">create</span> <span class="kw">or</span> <span class="kw">replace</span> <span class="kw">view</span> delivery <span class="kw">as</span></span>
+<span id="cb3-22"><a href="#cb3-22" aria-hidden="true" tabindex="-1"></a><span class="kw">select</span> bucket,</span>
+<span id="cb3-23"><a href="#cb3-23" aria-hidden="true" tabindex="-1"></a>       <span class="fu">count</span>(<span class="op">*</span>)                                               <span class="kw">as</span> orders,</span>
+<span id="cb3-24"><a href="#cb3-24" aria-hidden="true" tabindex="-1"></a>       <span class="fu">avg</span>(delay_days)                                        <span class="kw">as</span> avg_delay_days,</span>
+<span id="cb3-25"><a href="#cb3-25" aria-hidden="true" tabindex="-1"></a>       <span class="fu">avg</span>(review_score)                                      <span class="kw">as</span> avg_review,</span>
+<span id="cb3-26"><a href="#cb3-26" aria-hidden="true" tabindex="-1"></a>       <span class="fu">avg</span>((review_score <span class="op">&lt;=</span> <span class="dv">2</span>):<span class="ch">:int</span>)                          <span class="kw">as</span> share_1_2_stars,</span>
+<span id="cb3-27"><a href="#cb3-27" aria-hidden="true" tabindex="-1"></a>       <span class="fu">avg</span>(customer_repeated:<span class="ch">:int</span>) <span class="kw">filter</span> (<span class="kw">where</span> is_first)   <span class="kw">as</span> repeat_rate,</span>
+<span id="cb3-28"><a href="#cb3-28" aria-hidden="true" tabindex="-1"></a>       <span class="fu">count</span>(<span class="op">*</span>) <span class="kw">filter</span> (<span class="kw">where</span> is_first)                       <span class="kw">as</span> first_orders</span>
+<span id="cb3-29"><a href="#cb3-29" aria-hidden="true" tabindex="-1"></a><span class="kw">from</span> delivery_orders</span>
+<span id="cb3-30"><a href="#cb3-30" aria-hidden="true" tabindex="-1"></a><span class="kw">group</span> <span class="kw">by</span> <span class="dv">1</span></span>
+<span id="cb3-31"><a href="#cb3-31" aria-hidden="true" tabindex="-1"></a><span class="kw">order</span> <span class="kw">by</span> <span class="cf">case</span> bucket <span class="cf">when</span> <span class="st">'раньше на 7+ дней'</span> <span class="cf">then</span> <span class="dv">1</span> <span class="cf">when</span> <span class="st">'в срок'</span> <span class="cf">then</span> <span class="dv">2</span> <span class="cf">when</span> <span class="st">'1–3 дня'</span> <span class="cf">then</span> <span class="dv">3</span></span>
+<span id="cb3-32"><a href="#cb3-32" aria-hidden="true" tabindex="-1"></a>                     <span class="cf">when</span> <span class="st">'4–7 дней'</span> <span class="cf">then</span> <span class="dv">4</span> <span class="cf">else</span> <span class="dv">5</span> <span class="cf">end</span>;</span></code></pre></div><button title="Скопировать текст" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</div>
+</section>
+<section id="rfm-где-деньги" class="level2">
+<h2 class="anchored" data-anchor-id="rfm-где-деньги">RFM: где деньги</h2>
+<div class="cell" data-execution_count="9">
+<div id="tbl-rfm" class="cell quarto-float quarto-figure quarto-figure-center anchored" data-execution_count="9">
+<figure class="quarto-float quarto-float-tbl figure">
+<figcaption class="quarto-float-caption-top quarto-float-caption quarto-float-tbl" id="tbl-rfm-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+Таблица&nbsp;3: RFM-сегменты: доля клиентов и выручки
+</figcaption>
+<div aria-describedby="tbl-rfm-caption-0ceaefa1-69ba-4598-a22c-09a6ac19f8ca">
+<div class="cell-output cell-output-display" data-execution_count="9">
+<style type="text/css">
+</style>
+
+<table id="T_6b576" class="cell caption-top table table-sm table-striped small">
+<thead>
+<tr class="header">
+<th id="T_6b576_level0_col0" class="col_heading level0 col0" data-quarto-table-cell-role="th">Сегмент</th>
+<th id="T_6b576_level0_col1" class="col_heading level0 col1" data-quarto-table-cell-role="th">Клиентов</th>
+<th id="T_6b576_level0_col2" class="col_heading level0 col2" data-quarto-table-cell-role="th">Доля клиентов</th>
+<th id="T_6b576_level0_col3" class="col_heading level0 col3" data-quarto-table-cell-role="th">Доля выручки</th>
+<th id="T_6b576_level0_col4" class="col_heading level0 col4" data-quarto-table-cell-role="th">Средняя выручка с клиента, R$</th>
+</tr>
+</thead>
+<tbody>
+<tr class="odd">
+<td id="T_6b576_row0_col0" class="data row0 col0">Новые, крупный чек</td>
+<td id="T_6b576_row0_col1" class="data row0 col1">14 379</td>
+<td id="T_6b576_row0_col2" class="data row0 col2">15%</td>
+<td id="T_6b576_row0_col3" class="data row0 col3">28%</td>
+<td id="T_6b576_row0_col4" class="data row0 col4">302</td>
+</tr>
+<tr class="even">
+<td id="T_6b576_row1_col0" class="data row1 col0">Ушедшие, крупный чек</td>
+<td id="T_6b576_row1_col1" class="data row1 col1">13 742</td>
+<td id="T_6b576_row1_col2" class="data row1 col2">15%</td>
+<td id="T_6b576_row1_col3" class="data row1 col3">27%</td>
+<td id="T_6b576_row1_col4" class="data row1 col4">307</td>
+</tr>
+<tr class="odd">
+<td id="T_6b576_row2_col0" class="data row2 col0">Спящие</td>
+<td id="T_6b576_row2_col1" class="data row2 col1">18 016</td>
+<td id="T_6b576_row2_col2" class="data row2 col2">19%</td>
+<td id="T_6b576_row2_col3" class="data row2 col3">18%</td>
+<td id="T_6b576_row2_col4" class="data row2 col4">152</td>
+</tr>
+<tr class="even">
+<td id="T_6b576_row3_col0" class="data row3 col0">Ушедшие</td>
+<td id="T_6b576_row3_col1" class="data row3 col1">22 510</td>
+<td id="T_6b576_row3_col2" class="data row3 col2">24%</td>
+<td id="T_6b576_row3_col3" class="data row3 col3">11%</td>
+<td id="T_6b576_row3_col4" class="data row3 col4">73</td>
+</tr>
+<tr class="odd">
+<td id="T_6b576_row4_col0" class="data row4 col0">Новые</td>
+<td id="T_6b576_row4_col1" class="data row4 col1">21 668</td>
+<td id="T_6b576_row4_col2" class="data row4 col2">23%</td>
+<td id="T_6b576_row4_col3" class="data row4 col3">10%</td>
+<td id="T_6b576_row4_col4" class="data row4 col4">73</td>
+</tr>
+<tr class="even">
+<td id="T_6b576_row5_col0" class="data row5 col0">Постоянные, давно не покупали</td>
+<td id="T_6b576_row5_col1" class="data row5 col1">1 595</td>
+<td id="T_6b576_row5_col2" class="data row5 col2">2%</td>
+<td id="T_6b576_row5_col3" class="data row5 col3">3%</td>
+<td id="T_6b576_row5_col4" class="data row5 col4">298</td>
+</tr>
+<tr class="odd">
+<td id="T_6b576_row6_col0" class="data row6 col0">Постоянные, недавние</td>
+<td id="T_6b576_row6_col1" class="data row6 col1">1 194</td>
+<td id="T_6b576_row6_col2" class="data row6 col2">1%</td>
+<td id="T_6b576_row6_col3" class="data row6 col3">3%</td>
+<td id="T_6b576_row6_col4" class="data row6 col4">323</td>
+</tr>
+</tbody>
+</table>
+</div>
+</div>
+</figure>
+</div>
+</div>
+<p>R и M — квинтили, а F считается по числу заказов: при 97% разовых клиентов квинтили частоты бессмысленны — об этом стоит помнить, когда RFM применяют к маркетплейсам. Два сегмента с крупным чеком — это 30% клиентов и 56% выручки.</p>
+<div id="2c5f7ab2" class="cell" data-execution_count="10">
+<div class="cell-output cell-output-display cell-output-markdown" data-execution_count="10">
+<div class="code-copy-outer-scaffold"><div class="sourceCode" id="cb4"><pre class="sourceCode sql code-with-copy"><code class="sourceCode sql"><span id="cb4-1"><a href="#cb4-1" aria-hidden="true" tabindex="-1"></a><span class="co">-- RFM. R и M — квинтили (5 — лучше). F по квинтилям не считается: 97% клиентов купили один раз,</span></span>
+<span id="cb4-2"><a href="#cb4-2" aria-hidden="true" tabindex="-1"></a><span class="co">-- поэтому F — по числу заказов: 1 заказ → 1, 2 → 3, 3+ → 5.</span></span>
+<span id="cb4-3"><a href="#cb4-3" aria-hidden="true" tabindex="-1"></a><span class="kw">create</span> <span class="kw">or</span> <span class="kw">replace</span> <span class="kw">view</span> rfm <span class="kw">as</span></span>
+<span id="cb4-4"><a href="#cb4-4" aria-hidden="true" tabindex="-1"></a><span class="kw">with</span> c <span class="kw">as</span> (</span>
+<span id="cb4-5"><a href="#cb4-5" aria-hidden="true" tabindex="-1"></a>    <span class="kw">select</span> customer_unique_id,</span>
+<span id="cb4-6"><a href="#cb4-6" aria-hidden="true" tabindex="-1"></a>           date_diff(<span class="st">'day'</span>, <span class="fu">max</span>(purchased_at),</span>
+<span id="cb4-7"><a href="#cb4-7" aria-hidden="true" tabindex="-1"></a>                     (<span class="kw">select</span> <span class="fu">max</span>(purchased_at) <span class="kw">from</span> orders) <span class="op">+</span> <span class="dt">interval</span> <span class="dv">1</span> <span class="dt">day</span>) <span class="kw">as</span> recency_days,</span>
+<span id="cb4-8"><a href="#cb4-8" aria-hidden="true" tabindex="-1"></a>           <span class="fu">count</span>(<span class="op">*</span>)     <span class="kw">as</span> frequency,</span>
+<span id="cb4-9"><a href="#cb4-9" aria-hidden="true" tabindex="-1"></a>           <span class="fu">sum</span>(revenue) <span class="kw">as</span> monetary</span>
+<span id="cb4-10"><a href="#cb4-10" aria-hidden="true" tabindex="-1"></a>    <span class="kw">from</span> orders</span>
+<span id="cb4-11"><a href="#cb4-11" aria-hidden="true" tabindex="-1"></a>    <span class="kw">group</span> <span class="kw">by</span> <span class="dv">1</span></span>
+<span id="cb4-12"><a href="#cb4-12" aria-hidden="true" tabindex="-1"></a>),</span>
+<span id="cb4-13"><a href="#cb4-13" aria-hidden="true" tabindex="-1"></a>s <span class="kw">as</span> (</span>
+<span id="cb4-14"><a href="#cb4-14" aria-hidden="true" tabindex="-1"></a>    <span class="kw">select</span> <span class="op">*</span>,</span>
+<span id="cb4-15"><a href="#cb4-15" aria-hidden="true" tabindex="-1"></a>           <span class="fu">ntile</span>(<span class="dv">5</span>) <span class="kw">over</span> (<span class="kw">order</span> <span class="kw">by</span> recency_days <span class="kw">desc</span>) <span class="kw">as</span> r,</span>
+<span id="cb4-16"><a href="#cb4-16" aria-hidden="true" tabindex="-1"></a>           <span class="cf">case</span> <span class="cf">when</span> frequency <span class="op">=</span> <span class="dv">1</span> <span class="cf">then</span> <span class="dv">1</span> <span class="cf">when</span> frequency <span class="op">=</span> <span class="dv">2</span> <span class="cf">then</span> <span class="dv">3</span> <span class="cf">else</span> <span class="dv">5</span> <span class="cf">end</span> <span class="kw">as</span> f,</span>
+<span id="cb4-17"><a href="#cb4-17" aria-hidden="true" tabindex="-1"></a>           <span class="fu">ntile</span>(<span class="dv">5</span>) <span class="kw">over</span> (<span class="kw">order</span> <span class="kw">by</span> monetary) <span class="kw">as</span> m</span>
+<span id="cb4-18"><a href="#cb4-18" aria-hidden="true" tabindex="-1"></a>    <span class="kw">from</span> c</span>
+<span id="cb4-19"><a href="#cb4-19" aria-hidden="true" tabindex="-1"></a>)</span>
+<span id="cb4-20"><a href="#cb4-20" aria-hidden="true" tabindex="-1"></a><span class="kw">select</span> <span class="op">*</span>,</span>
+<span id="cb4-21"><a href="#cb4-21" aria-hidden="true" tabindex="-1"></a>       <span class="cf">case</span></span>
+<span id="cb4-22"><a href="#cb4-22" aria-hidden="true" tabindex="-1"></a>           <span class="cf">when</span> f <span class="op">&gt;=</span> <span class="dv">3</span> <span class="kw">and</span> r <span class="op">&gt;=</span> <span class="dv">4</span>             <span class="cf">then</span> <span class="st">'Постоянные, недавние'</span></span>
+<span id="cb4-23"><a href="#cb4-23" aria-hidden="true" tabindex="-1"></a>           <span class="cf">when</span> f <span class="op">&gt;=</span> <span class="dv">3</span>                        <span class="cf">then</span> <span class="st">'Постоянные, давно не покупали'</span></span>
+<span id="cb4-24"><a href="#cb4-24" aria-hidden="true" tabindex="-1"></a>           <span class="cf">when</span> r <span class="op">&gt;=</span> <span class="dv">4</span> <span class="kw">and</span> m <span class="op">&gt;=</span> <span class="dv">4</span>             <span class="cf">then</span> <span class="st">'Новые, крупный чек'</span></span>
+<span id="cb4-25"><a href="#cb4-25" aria-hidden="true" tabindex="-1"></a>           <span class="cf">when</span> r <span class="op">&gt;=</span> <span class="dv">4</span>                        <span class="cf">then</span> <span class="st">'Новые'</span></span>
+<span id="cb4-26"><a href="#cb4-26" aria-hidden="true" tabindex="-1"></a>           <span class="cf">when</span> r <span class="op">&lt;=</span> <span class="dv">2</span> <span class="kw">and</span> m <span class="op">&gt;=</span> <span class="dv">4</span>             <span class="cf">then</span> <span class="st">'Ушедшие, крупный чек'</span></span>
+<span id="cb4-27"><a href="#cb4-27" aria-hidden="true" tabindex="-1"></a>           <span class="cf">when</span> r <span class="op">&lt;=</span> <span class="dv">2</span>                        <span class="cf">then</span> <span class="st">'Ушедшие'</span></span>
+<span id="cb4-28"><a href="#cb4-28" aria-hidden="true" tabindex="-1"></a>           <span class="cf">else</span>                                    <span class="st">'Спящие'</span></span>
+<span id="cb4-29"><a href="#cb4-29" aria-hidden="true" tabindex="-1"></a>       <span class="cf">end</span> <span class="kw">as</span> <span class="kw">segment</span></span>
+<span id="cb4-30"><a href="#cb4-30" aria-hidden="true" tabindex="-1"></a><span class="kw">from</span> s;</span></code></pre></div><button title="Скопировать текст" class="code-copy-button"><i class="bi"></i></button></div>
+</div>
+</div>
+</section>
+<section id="рекомендации" class="level2">
+<h2 class="anchored" data-anchor-id="рекомендации">Рекомендации</h2>
+<ol type="1">
+<li><strong>Считать окупаемость рекламы по первому заказу.</strong> Повторные покупки за год добавляют 3,0% выручки, поэтому целевой CAC — в пределах маржи первого заказа, а не «LTV».</li>
+<li><strong>Чинить доставку в RJ и BA.</strong> Там опаздывает около 12% заказов против 4,5% в Сан-Паулу. Опоздания дают 33% негативных отзывов, а рейтинг продавца влияет на конверсию карточки — это гипотеза для следующего анализа, в данных о показах её не проверить.</li>
+<li><strong>Проверить win-back на «Ушедших с крупным чеком».</strong> 13 742 клиентов со средней выручкой R$ 307 — единственный сегмент, где возврат даже нескольких процентов заметен в деньгах. Проверять A/B-тестом с контрольной группой, как в <a href="https://wickedstacy085.github.io/ab-test-email/">проекте про email-рассылку</a>.</li>
+</ol>
+</section>
+<section id="ограничения" class="level2">
+<h2 class="anchored" data-anchor-id="ограничения">Ограничения</h2>
+<ul>
+<li>Данные одного маркетплейса за 2017–2018 годы; нет маржи, стоимости привлечения и данных о показах.</li>
+<li>Последние когорты наблюдаются меньше месяцев — на графиках показаны только прожитые месяцы.</li>
+<li>Связь «опоздание → оценка» — корреляция: опаздывают, возможно, определённые продавцы или категории.</li>
+</ul>
+</section>
+<section id="витрина-для-power-bi-и-код" class="level2">
+<h2 class="anchored" data-anchor-id="витрина-для-power-bi-и-код">Витрина для Power BI и код</h2>
+<ul>
+<li><a href="https://github.com/wickedstacy085/ecommerce-sql/tree/main/sql"><code>sql/</code></a> — все запросы, по слоям: база → когорты → LTV → RFM → юнит-экономика → доставка → витрина.</li>
+<li><a href="https://github.com/wickedstacy085/ecommerce-sql/tree/main/powerbi"><code>powerbi/</code></a> — «звезда» из таблицы фактов и справочника клиентов, меры DAX и макет отчёта.</li>
+<li><a href="https://github.com/wickedstacy085/ecommerce-sql/tree/main/tests"><code>tests/</code></a> — 22 проверки инвариантов на реальных данных.</li>
+</ul>
+
+
+</section>
+
+</main> <!-- /main -->
+<script id="quarto-html-after-body" type="application/javascript">
+  window.document.addEventListener("DOMContentLoaded", function (event) {
+    // Ensure there is a toggle, if there isn't float one in the top right
+    if (window.document.querySelector('.quarto-color-scheme-toggle') === null) {
+      const toggle = window.document.createElement('button');
+      toggle.type = "button";
+      toggle.setAttribute("role", "switch");
+      toggle.setAttribute("aria-checked", "false");
+      toggle.classList.add('top-right');
+      toggle.classList.add('quarto-color-scheme-toggle');
+      toggle.setAttribute("aria-label", "Переключить темный режим");
+      toggle.onclick = function() { try { window.quartoToggleColorScheme(); } catch {} return false; };
+      const i = window.document.createElement("i");
+      i.classList.add('bi');
+      toggle.appendChild(i);
+      // Put the toggle in a landmark of its own, so that landmark navigation
+      // can reach it.
+      //
+      // The container is always a fresh direct child of body, and the toggle is
+      // never moved into page furniture that the theme or the author controls.
+      // The toggle is positioned against the page, so any ancestor that
+      // establishes a containing block captures it: a positioned element or a
+      // grid for position: absolute, and transform, filter, will-change or
+      // contain for position: fixed. A direct child of body has none of these
+      // to inherit, and the shift when one appears is silent and visual.
+      //
+      // ARIA says a document should have at most one banner, and axe reports a
+      // duplicate whether or not the banners carry distinct labels. So use a
+      // header when the page has no banner yet, and a named region otherwise.
+      //
+      // A header is a banner wherever it sits, unless it is inside sectioning
+      // content, so this cannot just look at the children of body: a custom
+      // page layout wraps the title block header in a plain div. An explicit
+      // role="banner" always counts.
+      const sectioning = 'article, aside, main, nav, section, [role="article"], [role="complementary"], [role="main"], [role="navigation"], [role="region"]';
+      const hasBanner = Array.from(
+        window.document.querySelectorAll('header:not([role]), [role="banner"]')
+      ).some(function(el) {
+        return el.hasAttribute("role") || el.closest(sectioning) === null;
+      });
+      const container = window.document.createElement(hasBanner ? "div" : "header");
+      if (hasBanner) {
+        container.setAttribute("role", "region");
+        container.setAttribute("aria-label", "Переключить темный режим");
+      }
+      container.classList.add('quarto-color-scheme-toggle-container');
+      container.appendChild(toggle);
+      window.document.body.appendChild(container);
+    }
+    setColorSchemeToggle(hasAlternateSentinel())
+    const icon = "";
+    const anchorJS = new window.AnchorJS();
+    anchorJS.options = {
+      placement: 'right',
+      icon: icon
+    };
+    anchorJS.add('.anchored');
+    const isCodeAnnotation = (el) => {
+      for (const clz of el.classList) {
+        if (clz.startsWith('code-annotation-')) {                     
+          return true;
+        }
+      }
+      return false;
+    }
+    const onCopySuccess = function(e) {
+      // button target
+      const button = e.trigger;
+      // don't keep focus
+      button.blur();
+      // flash "checked"
+      button.classList.add('code-copy-button-checked');
+      var currentTitle = button.getAttribute("title");
+      button.setAttribute("title", "Скопировано");
+      let tooltip;
+      if (window.bootstrap) {
+        button.setAttribute("data-bs-toggle", "tooltip");
+        button.setAttribute("data-bs-placement", "left");
+        button.setAttribute("data-bs-title", "Скопировано");
+        tooltip = new bootstrap.Tooltip(button, 
+          { trigger: "manual", 
+            customClass: "code-copy-button-tooltip",
+            offset: [0, -8]});
+        tooltip.show();    
+      }
+      setTimeout(function() {
+        if (tooltip) {
+          tooltip.hide();
+          button.removeAttribute("data-bs-title");
+          button.removeAttribute("data-bs-toggle");
+          button.removeAttribute("data-bs-placement");
+        }
+        button.setAttribute("title", currentTitle);
+        button.classList.remove('code-copy-button-checked');
+      }, 1000);
+      // clear code selection
+      e.clearSelection();
+    }
+    const getTextToCopy = function(trigger) {
+      const outerScaffold = trigger.parentElement.cloneNode(true);
+      const codeEl = outerScaffold.querySelector('code');
+      for (const childEl of codeEl.children) {
+        if (isCodeAnnotation(childEl)) {
+          childEl.remove();
+        }
+      }
+      return codeEl.innerText;
+    }
+    const clipboard = new window.ClipboardJS('.code-copy-button:not([data-in-quarto-modal])', {
+      text: getTextToCopy
+    });
+    clipboard.on('success', onCopySuccess);
+    if (window.document.getElementById('quarto-embedded-source-code-modal')) {
+      const clipboardModal = new window.ClipboardJS('.code-copy-button[data-in-quarto-modal]', {
+        text: getTextToCopy,
+        container: window.document.getElementById('quarto-embedded-source-code-modal')
+      });
+      clipboardModal.on('success', onCopySuccess);
+    }
+      var localhostRegex = new RegExp(/^(?:http|https):\/\/localhost\:?[0-9]*\//);
+      var mailtoRegex = new RegExp(/^mailto:/);
+        var filterRegex = new RegExp("https:\/\/wickedstacy085\.github\.io\/ecommerce-sql");
+      var isInternal = (href) => {
+          return filterRegex.test(href) || localhostRegex.test(href) || mailtoRegex.test(href);
+      }
+      // Inspect non-navigation links and adorn them if external
+      window.quartoDecorateExternalLinks = function (root) {
+     var links = (root || window.document).querySelectorAll('a[href]:not(.nav-link):not(.navbar-brand):not(.toc-action):not(.sidebar-link):not(.sidebar-item-toggle):not(.pagination-link):not(.no-external):not([aria-hidden]):not(.dropdown-item):not(.quarto-navigation-tool):not(.about-link)');
+      for (var i=0; i<links.length; i++) {
+        const link = links[i];
+        if (!isInternal(link.href)) {
+          // undo the damage that might have been done by quarto-nav.js in the case of
+          // links that we want to consider external
+          if (link.dataset.originalHref !== undefined) {
+            link.href = link.dataset.originalHref;
+          }
+          if (!link.classList.contains('no-external-icon')) {
+          }
+        }
+      }
+      };
+      window.quartoDecorateExternalLinks(window.document);
+    // Esc closes the popup (WCAG 1.4.13) and focus leaving both trigger and
+    // popup closes it (WCAG 2.4.11); tippy handles neither for interactive popups.
+    const hideOnEscAndFocusOut = {
+      name: 'hideOnEscAndFocusOut',
+      defaultValue: true,
+      fn(instance) {
+        const dismiss = () => {
+          // A show scheduled by the trigger delay would otherwise reopen it
+          instance.clearDelayTimeouts();
+          instance.hide();
+        };
+        const onKeyDown = (event) => {
+          if (event.key !== 'Escape') {
+            return;
+          }
+          // Keep Esc from also reaching page handlers (e.g. reveal.js overview),
+          // except an open reveal.js slide menu, which Esc should close too.
+          // The menu handles keys only when its keyboard option is on.
+          const menuHandlesEsc = window.Reveal?.getPlugin?.('menu')?.isOpen() &&
+            window.Reveal.getConfig().menu?.keyboard !== false;
+          if (!menuHandlesEsc) {
+            event.stopPropagation();
+          }
+          if (instance.popper.contains(window.document.activeElement)) {
+            // Disabled while refocusing so the focus trigger does not reopen it
+            instance.disable();
+            instance.reference.focus();
+            instance.enable();
+          }
+          dismiss();
+        };
+        const onFocusOut = (event) => {
+          const target = event.relatedTarget;
+          if (target && !instance.reference.contains(target) &&
+              !instance.popper.contains(target)) {
+            dismiss();
+          }
+        };
+        // On the trigger too: a click trigger (code-annotations: select) has no
+        // blur handling. Attached for the instance's lifetime so leaving the
+        // trigger also cancels a show still pending on the trigger delay.
+        instance.reference.addEventListener('focusout', onFocusOut);
+        return {
+          onShow() {
+            window.document.addEventListener('keydown', onKeyDown, true);
+            instance.popper.addEventListener('focusout', onFocusOut);
+          },
+          onHide() {
+            window.document.removeEventListener('keydown', onKeyDown, true);
+            instance.popper.removeEventListener('focusout', onFocusOut);
+          },
+          onDestroy() {
+            instance.reference.removeEventListener('focusout', onFocusOut);
+          },
+        };
+      },
+    };
+    function tippyHover(el, contentFn, onTriggerFn, onUntriggerFn) {
+      const config = {
+        allowHTML: true,
+        maxWidth: 500,
+        delay: 100,
+        arrow: false,
+        appendTo: function(el) {
+            return el.parentElement;
+        },
+        interactive: true,
+        interactiveBorder: 10,
+        theme: 'quarto',
+        placement: 'bottom-start',
+        plugins: [hideOnEscAndFocusOut],
+      };
+      if (contentFn) {
+        config.content = contentFn;
+      }
+      if (onTriggerFn) {
+        config.onTrigger = onTriggerFn;
+      }
+      if (onUntriggerFn) {
+        config.onUntrigger = onUntriggerFn;
+      }
+      window.tippy(el, config); 
+    }
+    const noterefs = window.document.querySelectorAll('a[role="doc-noteref"]');
+    for (var i=0; i<noterefs.length; i++) {
+      const ref = noterefs[i];
+      tippyHover(ref, function() {
+        // use id or data attribute instead here
+        let href = ref.getAttribute('data-footnote-href') || ref.getAttribute('href');
+        try { href = new URL(href).hash; } catch {}
+        const id = href.replace(/^#\/?/, "");
+        const note = window.document.getElementById(id);
+        if (note) {
+          return note.innerHTML;
+        } else {
+          return "";
+        }
+      });
+    }
+    const xrefs = window.document.querySelectorAll('a.quarto-xref');
+    const processXRef = (id, note) => {
+      // Strip column container classes
+      const stripColumnClz = (el) => {
+        el.classList.remove("page-full", "page-columns");
+        if (el.children) {
+          for (const child of el.children) {
+            stripColumnClz(child);
+          }
+        }
+      }
+      stripColumnClz(note)
+      if (id === null || id.startsWith('sec-')) {
+        // Special case sections, only their first couple elements
+        const container = document.createElement("div");
+        if (note.children && note.children.length > 2) {
+          container.appendChild(note.children[0].cloneNode(true));
+          for (let i = 1; i < note.children.length; i++) {
+            const child = note.children[i];
+            if (child.tagName === "P" && child.innerText === "") {
+              continue;
+            } else {
+              container.appendChild(child.cloneNode(true));
+              break;
+            }
+          }
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(container);
+          }
+          return container.innerHTML
+        } else {
+          if (window.Quarto?.typesetMath) {
+            window.Quarto.typesetMath(note);
+          }
+          return note.innerHTML;
+        }
+      } else {
+        // Remove any anchor links if they are present
+        const anchorLink = note.querySelector('a.anchorjs-link');
+        if (anchorLink) {
+          anchorLink.remove();
+        }
+        if (window.Quarto?.typesetMath) {
+          window.Quarto.typesetMath(note);
+        }
+        if (note.classList.contains("callout")) {
+          return note.outerHTML;
+        } else {
+          return note.innerHTML;
+        }
+      }
+    }
+    for (var i=0; i<xrefs.length; i++) {
+      const xref = xrefs[i];
+      tippyHover(xref, undefined, function(instance) {
+        instance.disable();
+        let url = xref.getAttribute('href');
+        let hash = undefined; 
+        if (url.startsWith('#')) {
+          hash = url;
+        } else {
+          try { hash = new URL(url).hash; } catch {}
+        }
+        if (hash) {
+          const id = hash.replace(/^#\/?/, "");
+          const note = window.document.getElementById(id);
+          if (note !== null) {
+            try {
+              const html = processXRef(id, note.cloneNode(true));
+              instance.setContent(html);
+            } finally {
+              instance.enable();
+              instance.show();
+            }
+          } else {
+            // See if we can fetch this
+            fetch(url.split('#')[0])
+            .then(res => res.text())
+            .then(html => {
+              const parser = new DOMParser();
+              const htmlDoc = parser.parseFromString(html, "text/html");
+              const note = htmlDoc.getElementById(id);
+              if (note !== null) {
+                const html = processXRef(id, note);
+                instance.setContent(html);
+              } 
+            }).finally(() => {
+              instance.enable();
+              instance.show();
+            });
+          }
+        } else {
+          // See if we can fetch a full url (with no hash to target)
+          // This is a special case and we should probably do some content thinning / targeting
+          fetch(url)
+          .then(res => res.text())
+          .then(html => {
+            const parser = new DOMParser();
+            const htmlDoc = parser.parseFromString(html, "text/html");
+            const note = htmlDoc.querySelector('main.content');
+            if (note !== null) {
+              // This should only happen for chapter cross references
+              // (since there is no id in the URL)
+              // remove the first header
+              if (note.children.length > 0 && note.children[0].tagName === "HEADER") {
+                note.children[0].remove();
+              }
+              const html = processXRef(null, note);
+              instance.setContent(html);
+            } 
+          }).finally(() => {
+            instance.enable();
+            instance.show();
+          });
+        }
+      }, function(instance) {
+      });
+    }
+        let selectedAnnoteEl;
+        const selectorForAnnotation = ( cell, annotation) => {
+          let cellAttr = 'data-code-cell="' + cell + '"';
+          let lineAttr = 'data-code-annotation="' +  annotation + '"';
+          const selector = 'span[' + cellAttr + '][' + lineAttr + ']';
+          return selector;
+        }
+        const selectCodeLines = (annoteEl) => {
+          const doc = window.document;
+          const targetCell = annoteEl.getAttribute("data-target-cell");
+          const targetAnnotation = annoteEl.getAttribute("data-target-annotation");
+          const annoteSpan = window.document.querySelector(selectorForAnnotation(targetCell, targetAnnotation));
+          const lines = annoteSpan.getAttribute("data-code-lines").split(",");
+          const lineIds = lines.map((line) => {
+            return targetCell + "-" + line;
+          })
+          // Each band is positioned against its own containing block, which is
+          // not the offsetParent of the lines, so place it from client rects.
+          const placeBand = (band, firstEl, lastEl, codeBlock) => {
+            const container = band.offsetParent;
+            if (container === null) {
+              return;
+            }
+            const containerRect = container.getBoundingClientRect();
+            // Reveal.js scales slides with a transform, so convert client
+            // pixels back to the CSS pixels of the container.
+            const scale = containerRect.height / container.offsetHeight || 1;
+            const firstRect = firstEl.getBoundingClientRect();
+            const lastRect = lastEl.getBoundingClientRect();
+            const top = (firstRect.top - containerRect.top) / scale - container.clientTop + container.scrollTop;
+            const height = (lastRect.bottom - firstRect.top) / scale;
+            band.style.top = top - 2 + "px";
+            band.style.height = height + 4 + "px";
+            if (codeBlock) {
+              // Without the copy button wrapper, the containing block is wider
+              // than the code block, so span the code block explicitly.
+              const blockRect = codeBlock.getBoundingClientRect();
+              band.style.left = (blockRect.left - containerRect.left) / scale - container.clientLeft + container.scrollLeft + "px";
+              band.style.width = blockRect.width / scale + "px";
+            }
+          };
+          if (lineIds.length > 0) {
+            const el = window.document.getElementById(lineIds[0]);
+            const lastEl = window.document.getElementById(lineIds[lineIds.length - 1]);
+            const parent = el.parentElement.parentElement;
+            // cook up a div (if necessary) and position it
+            let div = window.document.getElementById("code-annotation-line-highlight");
+            if (div === null) {
+              div = window.document.createElement("div");
+              div.setAttribute("id", "code-annotation-line-highlight");
+              div.style.position = 'absolute';
+              parent.appendChild(div);
+            }
+            placeBand(div, el, lastEl, parent.closest("div.sourceCode") || parent);
+            let gutterDiv = window.document.getElementById("code-annotation-line-highlight-gutter");
+            if (gutterDiv === null) {
+              gutterDiv = window.document.createElement("div");
+              gutterDiv.setAttribute("id", "code-annotation-line-highlight-gutter");
+              gutterDiv.style.position = 'absolute';
+              const codeCell = window.document.getElementById(targetCell);
+              const gutter = codeCell.querySelector('.code-annotation-gutter');
+              gutter.appendChild(gutterDiv);
+            }
+            placeBand(gutterDiv, el, lastEl);
+            selectedAnnoteEl = annoteEl;
+          }
+        };
+        const unselectCodeLines = () => {
+          const elementsIds = ["code-annotation-line-highlight", "code-annotation-line-highlight-gutter"];
+          elementsIds.forEach((elId) => {
+            const div = window.document.getElementById(elId);
+            if (div) {
+              div.remove();
+            }
+          });
+          selectedAnnoteEl = undefined;
+        };
+          // Handle positioning of the toggle
+      window.addEventListener(
+        "resize",
+        throttle(() => {
+          elRect = undefined;
+          if (selectedAnnoteEl) {
+            selectCodeLines(selectedAnnoteEl);
+          }
+        }, 10)
+      );
+      function throttle(fn, ms) {
+      let throttle = false;
+      let timer;
+        return (...args) => {
+          if(!throttle) { // first call gets through
+              fn.apply(this, args);
+              throttle = true;
+          } else { // all the others get throttled
+              if(timer) clearTimeout(timer); // cancel #2
+              timer = setTimeout(() => {
+                fn.apply(this, args);
+                timer = throttle = false;
+              }, ms);
+          }
+        };
+      }
+        // Attach click handler to the DT
+        const annoteDls = window.document.querySelectorAll('dt[data-target-cell]');
+        for (const annoteDlNode of annoteDls) {
+          annoteDlNode.addEventListener('click', (event) => {
+            const clickedEl = event.target;
+            if (clickedEl !== selectedAnnoteEl) {
+              unselectCodeLines();
+              const activeEl = window.document.querySelector('dt[data-target-cell].code-annotation-active');
+              if (activeEl) {
+                activeEl.classList.remove('code-annotation-active');
+              }
+              selectCodeLines(clickedEl);
+              clickedEl.classList.add('code-annotation-active');
+            } else {
+              // Unselect the line
+              unselectCodeLines();
+              clickedEl.classList.remove('code-annotation-active');
+            }
+          });
+        }
+    const findCites = (el) => {
+      const parentEl = el.parentElement;
+      if (parentEl) {
+        const cites = parentEl.dataset.cites;
+        if (cites) {
+          return {
+            el,
+            cites: cites.split(' ')
+          };
+        } else {
+          return findCites(el.parentElement)
+        }
+      } else {
+        return undefined;
+      }
+    };
+    var bibliorefs = window.document.querySelectorAll('a[role="doc-biblioref"]');
+    for (var i=0; i<bibliorefs.length; i++) {
+      const ref = bibliorefs[i];
+      const citeInfo = findCites(ref);
+      if (citeInfo) {
+        tippyHover(citeInfo.el, function() {
+          var popup = window.document.createElement('div');
+          citeInfo.cites.forEach(function(cite) {
+            var citeDiv = window.document.createElement('div');
+            citeDiv.classList.add('hanging-indent');
+            citeDiv.classList.add('csl-entry');
+            var biblioDiv = window.document.getElementById('ref-' + cite);
+            if (biblioDiv) {
+              citeDiv.innerHTML = biblioDiv.innerHTML;
+            }
+            popup.appendChild(citeDiv);
+          });
+          return popup.innerHTML;
+        });
+      }
+    }
+  });
+  </script>
+  <script type="application/javascript">
+  window.quartoScrollableRegionsLabels = {"code":"Прокручиваемый код","output":"Прокручиваемый вывод"};
+  </script>
+</div> <!-- /content -->
+<footer class="footer">
+  <div class="nav-footer">
+    <div class="nav-footer-left">
+<p>Анастасия Смирнова, 2026 · данные Olist, CC BY-NC-SA 4.0</p>
+</div>   
+    <div class="nav-footer-center">
+      &nbsp;
+    </div>
+    <div class="nav-footer-right">
+<p><a href="https://github.com/wickedstacy085/ecommerce-sql">Код проекта</a></p>
+</div>
+  </div>
+</footer>
+
+
+
+
+</body></html>
