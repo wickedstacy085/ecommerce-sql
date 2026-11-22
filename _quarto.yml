@@ -1,0 +1,39 @@
+project:
+  type: website
+  output-dir: _site
+  render:
+    - index.qmd
+    - dashboard.qmd
+
+execute:
+  freeze: false
+
+website:
+  title: "Когорты и юнит-экономика на SQL"
+  site-url: "https://wickedstacy085.github.io/ecommerce-sql"
+  repo-url: "https://github.com/wickedstacy085/ecommerce-sql"
+  open-graph: true
+  navbar:
+    left:
+      - href: "https://wickedstacy085.github.io/analytics/"
+        text: "← Все проекты"
+      - href: index.qmd
+        text: Отчёт
+      - href: dashboard.qmd
+        text: Дашборд
+    right:
+      - icon: github
+        href: "https://github.com/wickedstacy085/ecommerce-sql"
+        aria-label: GitHub
+  page-footer:
+    left: "Анастасия Смирнова, 2026 · данные Olist, CC BY-NC-SA 4.0"
+    right: "[Код проекта](https://github.com/wickedstacy085/ecommerce-sql)"
+
+format:
+  html:
+    theme:
+      light: [flatly, assets/custom.scss]
+      dark: [darkly, assets/custom.scss]
+    toc: true
+    code-copy: true
+    lang: ru

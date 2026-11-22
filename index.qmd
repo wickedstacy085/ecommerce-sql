@@ -1,0 +1,208 @@
+---
+title: "Когорты и юнит-экономика интернет-магазина на SQL"
+description: "SQL-анализ 96 тыс. заказов маркетплейса Olist: когорты, retention, LTV, RFM-сегменты, юнит-экономика и влияние доставки на отзывы. Интерактивный дашборд и витрина для Power BI."
+author: Анастасия Смирнова
+date: 2026-11-22
+execute:
+  echo: false
+  warning: false
+---
+
+```{python}
+#| label: setup
+import sys
+sys.path.insert(0, "src")
+from pathlib import Path
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from IPython.display import Markdown
+from shop import db
+
+con = db.connect()
+q = lambda sql: con.execute(sql).fetchall()[0]
+
+gmv, n_orders, n_cust = q("select sum(revenue), count(*), count(distinct customer_unique_id) from orders")
+repeat_cust = q("select avg((n > 1)::int) from (select count(*) n from orders group by customer_unique_id)")[0]
+late_share, neg_from_late = q("""select avg((delay_days > 0)::int),
+    sum(((delay_days > 0) and review_score <= 2)::int) / sum((review_score <= 2)::int) from delivery_orders""")
+
+cohorts = db.query(con, "cohorts")
+ltv = db.query(con, "ltv")
+m1 = cohorts.loc[cohorts["offset"] == 1, "retention"].mean()
+w = ltv.pivot(index="cohort_month", columns="offset", values="cum_revenue_per_customer")
+ltv_growth_12 = (w[12] / w[0] - 1).dropna().mean()          # когорты, прожившие 12 месяцев
+n_cohorts_12 = w[12].notna().sum()
+
+delivery = db.query(con, "delivery").set_index("bucket")
+rfm = db.query(con, "rfm")
+seg = (rfm.groupby("segment").agg(customers=("r", "size"), revenue=("monetary", "sum"), avg_check=("monetary", "mean"))
+          .assign(cust_share=lambda d: d.customers / d.customers.sum(), rev_share=lambda d: d.revenue / d.revenue.sum())
+          .sort_values("revenue", ascending=False))
+states = con.execute("""select state, count(*) orders, avg((delay_days > 0)::int) late, avg(review_score) review
+                        from delivery_orders group by 1 order by 2 desc limit 8""").df().set_index("state")
+lost_big = seg.loc["Ушедшие, крупный чек"]
+
+def fmt(x, d=0):
+    return f"{x:,.{d}f}".replace(",", " ").replace(".", ",").replace("-", "−")
+
+def pct(x, d=0):
+    return fmt(100 * x, d) + "%"
+
+def show_sql(name, view=None):
+    text = Path(f"sql/{name}.sql").read_text(encoding="utf-8")
+    return Markdown(f"```sql\n{text.strip()}\n```")
+```
+
+::: {.result-box}
+**Вопрос.** Маркетплейс растёт: за 20 месяцев `{python} fmt(n_orders)` доставленных заказов на
+R$ `{python} fmt(gmv / 1e6, 1)` млн. Растёт ли он за счёт постоянных клиентов — и где теряет деньги и репутацию?
+
+**Ответ.** Нет: повторно покупают только **`{python} pct(repeat_cust, 1)` клиентов**, и за год повторные покупки
+добавляют к выручке с клиента всего `{python} pct(ltv_growth_12, 1)`. LTV ≈ первый заказ — значит, привлечение
+окупается только с первой покупки. Главная управляемая проблема — доставка: **`{python} pct(late_share, 1)` заказов
+опаздывают, и на них приходится `{python} pct(neg_from_late)` всех негативных отзывов**.
+
+[Открыть интерактивный дашборд →](dashboard.qmd){.btn .btn-primary .btn-sm}
+:::
+
+## Данные
+
+[Olist](https://www.kaggle.com/datasets/olistbr/brazilian-ecommerce) — реальные обезличенные заказы бразильского
+маркетплейса, 8 связанных таблиц (лицензия CC BY-NC-SA 4.0). В анализе — доставленные заказы с января 2017 по
+август 2018: `{python} fmt(n_orders)` заказов, `{python} fmt(n_cust)` клиентов. Выручка заказа — товары плюс доставка.
+
+Весь анализ — SQL-запросы в DuckDB ([папка `sql/`](https://github.com/wickedstacy085/ecommerce-sql/tree/main/sql)),
+Python только выполняет их и рисует графики. Каждый запрос проверен тестами: число строк совпадает с оригиналом,
+выручка в отчётах сходится с позициями заказов, каждый клиент попадает ровно в одну когорту и один сегмент.
+
+**Ловушка в данных.** `customer_id` в Olist новый у каждого заказа, поэтому по нему повторных покупок нет вообще.
+Человека идентифицирует `customer_unique_id` — с него начинается базовый слой:
+
+```{python}
+show_sql("01_base")
+```
+
+## Когорты: клиенты почти не возвращаются
+
+```{python}
+#| label: fig-cohorts
+#| fig-cap: "Доля клиентов когорты, купивших снова через N месяцев после первой покупки, %"
+h = cohorts[(cohorts["offset"] >= 1) & (cohorts["offset"] <= 12)].copy()
+h["cohort"] = h["cohort_month"].dt.strftime("%Y-%m")
+p = h.pivot(index="cohort", columns="offset", values="retention") * 100
+fig = px.imshow(p, color_continuous_scale="Blues", aspect="auto", text_auto=".1f",
+                labels=dict(x="Месяцев с первой покупки", y="Когорта", color="%"))
+fig.update_layout(height=520, margin=dict(l=0, r=0, t=10, b=0), coloraxis_showscale=False)
+fig.update_yaxes(type="category", dtick=1)
+fig.show()
+```
+
+В среднем через месяц после первой покупки возвращается `{python} pct(m1, 2)` когорты, дальше — ещё меньше.
+Это не провал одного месяца, а свойство модели: на маркетплейс приходят за конкретной покупкой (крупнейшие
+категории по выручке — красота и здоровье, часы и подарки, товары для дома, спорт), а не за регулярными, как в
+продуктовом магазине.
+
+```{python}
+show_sql("02_cohorts")
+```
+
+## LTV: выручка с клиента ≈ первый заказ
+
+```{python}
+#| label: fig-ltv
+#| fig-cap: "Накопленная выручка на клиента по когортам, R$ (линия — когорта)"
+l = ltv.copy()
+l["cohort"] = l["cohort_month"].dt.strftime("%Y-%m")
+fig = px.line(l[l["offset"] <= 18], x="offset", y="cum_revenue_per_customer", color="cohort",
+              labels=dict(offset="Месяцев с первой покупки", cum_revenue_per_customer="R$ на клиента", cohort="Когорта"))
+fig.update_traces(line=dict(width=1.2))
+fig.update_layout(height=380, margin=dict(l=0, r=0, t=10, b=0), showlegend=False)
+fig.show()
+```
+
+Линии почти горизонтальные: у `{python} fmt(n_cohorts_12)` когорт, проживших год, выручка на клиента за 12 месяцев
+выросла в среднем на `{python} pct(ltv_growth_12, 1)`. Для юнит-экономики это значит: стоимость привлечения клиента
+(CAC) должна окупаться маржой **первого** заказа — рассчитывать на возврат денег через повторные покупки нельзя.
+
+## Доставка: 7% заказов — треть негатива
+
+```{python}
+#| label: tbl-delivery
+#| tbl-cap: "Отзывы и повторные покупки в зависимости от опоздания доставки относительно обещанной даты"
+d = delivery.reset_index()
+pd.DataFrame({
+    "Доставка": d["bucket"],
+    "Заказов": d["orders"].map(fmt),
+    "Средняя оценка": d["avg_review"].map(lambda v: fmt(v, 2)),
+    "Оценки 1–2": d["share_1_2_stars"].map(pct),
+    "Вернулись после первого заказа": d["repeat_rate"].map(lambda v: pct(v, 1)),
+}).style.hide(axis="index")
+```
+
+Срок, который обещает Olist, консервативный: `{python} pct(delivery.loc["раньше на 7+ дней", "orders"] / delivery["orders"].sum())`
+заказов приезжает больше чем на неделю раньше. Но если заказ опаздывает, оценка падает резко: с
+`{python} fmt(delivery.loc["в срок", "avg_review"], 1)` до `{python} fmt(delivery.loc["8+ дней", "avg_review"], 1)` при
+опоздании на 8+ дней, и уже `{python} pct(delivery.loc["8+ дней", "share_1_2_stars"])` таких отзывов — на 1–2 звезды.
+На повторные покупки опоздание почти не влияет (`{python} pct(delivery.loc["в срок", "repeat_rate"], 1)` против
+`{python} pct(delivery.loc["8+ дней", "repeat_rate"], 1)`) — возвращаются мало в любом случае.
+
+Опоздания сосредоточены в отдельных штатах:
+
+```{python}
+#| label: tbl-states
+#| tbl-cap: "Восемь крупнейших штатов: доля опоздавших заказов и средняя оценка"
+s = states.reset_index()
+pd.DataFrame({"Штат": s["state"], "Заказов": s["orders"].map(fmt),
+              "Опоздали": s["late"].map(lambda v: pct(v, 1)),
+              "Средняя оценка": s["review"].map(lambda v: fmt(v, 2))}).style.hide(axis="index")
+```
+
+```{python}
+show_sql("06_delivery")
+```
+
+## RFM: где деньги
+
+```{python}
+#| label: tbl-rfm
+#| tbl-cap: "RFM-сегменты: доля клиентов и выручки"
+r = seg.reset_index()
+pd.DataFrame({"Сегмент": r["segment"], "Клиентов": r["customers"].map(fmt),
+              "Доля клиентов": r["cust_share"].map(pct), "Доля выручки": r["rev_share"].map(pct),
+              "Средняя выручка с клиента, R$": r["avg_check"].map(fmt)}).style.hide(axis="index")
+```
+
+R и M — квинтили, а F считается по числу заказов: при 97% разовых клиентов квинтили частоты бессмысленны —
+об этом стоит помнить, когда RFM применяют к маркетплейсам. Два сегмента с крупным чеком — это
+`{python} pct(seg.loc[["Новые, крупный чек", "Ушедшие, крупный чек"], "cust_share"].sum())` клиентов и
+`{python} pct(seg.loc[["Новые, крупный чек", "Ушедшие, крупный чек"], "rev_share"].sum())` выручки.
+
+```{python}
+show_sql("04_rfm")
+```
+
+## Рекомендации
+
+1. **Считать окупаемость рекламы по первому заказу.** Повторные покупки за год добавляют
+   `{python} pct(ltv_growth_12, 1)` выручки, поэтому целевой CAC — в пределах маржи первого заказа, а не «LTV».
+2. **Чинить доставку в RJ и BA.** Там опаздывает около `{python} pct(states.loc[["RJ", "BA"], "late"].mean())`
+   заказов против `{python} pct(states.loc["SP", "late"], 1)` в Сан-Паулу. Опоздания дают
+   `{python} pct(neg_from_late)` негативных отзывов, а рейтинг продавца влияет на конверсию карточки — это гипотеза
+   для следующего анализа, в данных о показах её не проверить.
+3. **Проверить win-back на «Ушедших с крупным чеком».** `{python} fmt(lost_big["customers"])` клиентов со средней
+   выручкой R$ `{python} fmt(lost_big["avg_check"])` — единственный сегмент, где возврат даже нескольких процентов
+   заметен в деньгах. Проверять A/B-тестом с контрольной группой, как в
+   [проекте про email-рассылку](https://wickedstacy085.github.io/ab-test-email/).
+
+## Ограничения
+
+- Данные одного маркетплейса за 2017–2018 годы; нет маржи, стоимости привлечения и данных о показах.
+- Последние когорты наблюдаются меньше месяцев — на графиках показаны только прожитые месяцы.
+- Связь «опоздание → оценка» — корреляция: опаздывают, возможно, определённые продавцы или категории.
+
+## Витрина для Power BI и код
+
+- [`sql/`](https://github.com/wickedstacy085/ecommerce-sql/tree/main/sql) — все запросы, по слоям: база → когорты → LTV → RFM → юнит-экономика → доставка → витрина.
+- [`powerbi/`](https://github.com/wickedstacy085/ecommerce-sql/tree/main/powerbi) — «звезда» из таблицы фактов и справочника клиентов, меры DAX и макет отчёта.
+- [`tests/`](https://github.com/wickedstacy085/ecommerce-sql/tree/main/tests) — 22 проверки инвариантов на реальных данных.

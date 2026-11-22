@@ -1,0 +1,114 @@
+---
+title: "Olist: продажи, когорты, доставка"
+format:
+  dashboard:
+    orientation: rows
+    scrolling: true
+execute:
+  echo: false
+  warning: false
+---
+
+```{python}
+import sys
+sys.path.insert(0, "src")
+import plotly.express as px
+from shop import db
+
+con = db.connect()
+ue = db.query(con, "unit_economics")
+cohorts = db.query(con, "cohorts")
+delivery = db.query(con, "delivery")
+rfm = db.query(con, "rfm")
+gmv, orders, customers = con.execute(
+    "select sum(revenue), count(*), count(distinct customer_unique_id) from orders").fetchall()[0]
+repeat = con.execute("select avg((n > 1)::int) from (select count(*) n from orders group by customer_unique_id)").fetchall()[0][0]
+late = con.execute("select avg((delay_days > 0)::int) from delivery_orders").fetchall()[0][0]
+
+def fmt(x, d=0):
+    return f"{x:,.{d}f}".replace(",", " ").replace(".", ",")
+
+def layout(fig):
+    fig.update_layout(margin=dict(l=0, r=0, t=10, b=0), template="plotly_white", showlegend=False)
+    return fig
+```
+
+## KPI {height="190px"}
+
+```{python}
+#| content: valuebox
+#| title: "GMV, R$ млн"
+dict(icon="cash-stack", color="primary", value=fmt(gmv / 1e6, 1))
+```
+
+```{python}
+#| content: valuebox
+#| title: "Заказов"
+dict(icon="bag", color="light", value=fmt(orders))
+```
+
+```{python}
+#| content: valuebox
+#| title: "Средний чек, R$"
+dict(icon="receipt", color="light", value=fmt(gmv / orders))
+```
+
+```{python}
+#| content: valuebox
+#| title: "Купили повторно"
+dict(icon="arrow-repeat", color="warning", value=fmt(100 * repeat, 1) + "%")
+```
+
+```{python}
+#| content: valuebox
+#| title: "Опоздавших заказов"
+dict(icon="truck", color="danger", value=fmt(100 * late, 1) + "%")
+```
+
+## Продажи {height="380px"}
+
+```{python}
+#| title: "GMV по месяцам, R$"
+layout(px.bar(ue, x="month", y="gmv", labels=dict(month="", gmv="R$")))
+```
+
+```{python}
+#| title: "Средний чек, R$"
+layout(px.line(ue, x="month", y="aov", markers=True, labels=dict(month="", aov="R$")))
+```
+
+## Клиенты {height="520px"}
+
+```{python}
+#| title: "Retention когорт, % (месяцев с первой покупки)"
+h = cohorts[(cohorts["offset"] >= 1) & (cohorts["offset"] <= 12)].copy()
+h["cohort"] = h["cohort_month"].dt.strftime("%Y-%m")
+p = h.pivot(index="cohort", columns="offset", values="retention") * 100
+fig = px.imshow(p, color_continuous_scale="Blues", aspect="auto", text_auto=".1f", labels=dict(x="", y="", color="%"))
+_ = fig.update_layout(coloraxis_showscale=False)
+_ = fig.update_yaxes(type="category")
+layout(fig)
+```
+
+```{python}
+#| title: "RFM-сегменты: доля выручки"
+s = rfm.groupby("segment", as_index=False)["monetary"].sum().sort_values("monetary")
+s["share"] = s["monetary"] / s["monetary"].sum() * 100
+fig = px.bar(s, x="share", y="segment", orientation="h", text_auto=".0f", labels=dict(share="% выручки", segment=""))
+layout(fig)
+```
+
+## Доставка {height="400px"}
+
+```{python}
+#| title: "Доля отзывов на 1–2 звезды по опозданию доставки, %"
+d = delivery.assign(neg=delivery["share_1_2_stars"] * 100)
+layout(px.bar(d, x="bucket", y="neg", text_auto=".0f", labels=dict(bucket="", neg="%")))
+```
+
+```{python}
+#| title: "Доля опоздавших заказов по штатам (20 крупнейших), %"
+st = con.execute("""select state, count(*) n, avg((delay_days > 0)::int) * 100 late
+                    from delivery_orders group by 1 order by n desc limit 20""").df().sort_values("late")
+layout(px.bar(st, x="state", y="late", text_auto=".0f", labels=dict(state="", late="%")))
+```
